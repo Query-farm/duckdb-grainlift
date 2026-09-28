@@ -93,7 +93,7 @@ require_authentication = ${REQUIRE_AUTH}
 cors_origins = "${CORS_ORIGIN}"
 # Browser pages that are reloaded never close their sessions; keep the quota
 # generous and let abandoned sessions expire quickly.
-session_ttl_seconds = 600
+session_ttl_seconds = 3600
 max_sessions = 4096
 max_sessions_per_principal = 1024
 
