@@ -15,8 +15,13 @@
 #   (driver installed via `dbc install postgresql`). It is stopped on exit.
 #
 # Optional Iroh listener (for iroh:// from the browser COI build):
-#   GRAINLIFT_IROH_PRINCIPAL=<client 64-hex EndpointId>  maps that client to the
-#   test principal; the server's EndpointId is written to $WORK_DIR/iroh-endpoint.json.
+#   GRAINLIFT_IROH=1 enables it; the server's EndpointId is written to
+#   $WORK_DIR/iroh-endpoint.json.
+#   GRAINLIFT_IROH_PRINCIPAL=<client 64-hex EndpointId> maps that client to the
+#   test principal (implies GRAINLIFT_IROH=1).
+#
+# GRAINLIFT_OPEN=1: no authentication at all — any HTTP or Iroh client may use
+# every target (for a private demo link; never expose real data this way).
 #   GRAINLIFT_IROH_SECRET_KEY=<64-hex> pins the server identity (default: generated).
 set -euo pipefail
 
@@ -76,11 +81,15 @@ if [[ "${GRAINLIFT_PG:-1}" != "0" && -x "$PG_BIN/initdb" ]]; then
     echo "postgres on 127.0.0.1:${PG_PORT} (database grainlift)" >&2
 fi
 
+OPEN="${GRAINLIFT_OPEN:-0}"
+REQUIRE_AUTH=true
+[[ "$OPEN" == "1" ]] && REQUIRE_AUTH=false
+
 CONFIG="$WORK_DIR/grainlift.toml"
 cat > "$CONFIG" <<TOML
 [server]
 listen = "127.0.0.1:${PORT}"
-require_authentication = true
+require_authentication = ${REQUIRE_AUTH}
 cors_origins = "${CORS_ORIGIN}"
 # Browser pages that are reloaded never close their sessions; keep the quota
 # generous and let abandoned sessions expire quickly.
@@ -90,9 +99,17 @@ max_sessions_per_principal = 1024
 
 [auth.static_bearer_tokens]
 grainlift-test-token = "tester"
+TOML
+
+if [[ "$OPEN" != "1" ]]; then
+    cat >> "$CONFIG" <<TOML
 
 [auth.target_permissions]
 "tester" = ["sqlite", "sqlite_demo", "postgres"]
+TOML
+fi
+
+cat >> "$CONFIG" <<TOML
 
 [targets.sqlite]
 driver = "sqlite"
@@ -127,7 +144,7 @@ value = "postgresql://postgres@127.0.0.1:${PG_PORT}/grainlift"
 TOML
 fi
 
-if [[ -n "${GRAINLIFT_IROH_PRINCIPAL:-}" ]]; then
+if [[ -n "${GRAINLIFT_IROH_PRINCIPAL:-}" || "${GRAINLIFT_IROH:-0}" == "1" ]]; then
     KEY_FILE="$WORK_DIR/iroh.key"
     if [[ -n "${GRAINLIFT_IROH_SECRET_KEY:-}" ]]; then
         printf '%s' "$GRAINLIFT_IROH_SECRET_KEY" > "$KEY_FILE"
@@ -141,10 +158,14 @@ if [[ -n "${GRAINLIFT_IROH_PRINCIPAL:-}" ]]; then
 issuer = "grainlift-test"
 secret_key_file = "${KEY_FILE}"
 endpoint_info_file = "${WORK_DIR}/iroh-endpoint.json"
+TOML
+    if [[ -n "${GRAINLIFT_IROH_PRINCIPAL:-}" ]]; then
+        cat >> "$CONFIG" <<TOML
 
 [iroh.principals]
 "${GRAINLIFT_IROH_PRINCIPAL}" = "tester"
 TOML
+    fi
 fi
 
 echo "grainlift-server on http://127.0.0.1:${PORT} (CORS origin ${CORS_ORIGIN}); config ${CONFIG}" >&2

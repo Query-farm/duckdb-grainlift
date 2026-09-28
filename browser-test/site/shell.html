@@ -90,6 +90,17 @@
   .run:disabled { opacity: 0.5; cursor: progress; }
   .text { margin: 6px 0; color: var(--muted); font-size: 13px; }
   .sql { margin: 0; font: 11.5px/1.5 var(--mono); color: var(--accent-2); white-space: pre-wrap; word-break: break-word; max-height: 7.5em; overflow: hidden; }
+  .cfg { display: grid; gap: 8px; }
+  .cfg label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+  .cfg input { width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font: 12px var(--mono); }
+  .cfg input:focus { outline: none; border-color: var(--accent); }
+  .cfg[data-transport="iroh"] .for-http, .cfg[data-transport="http"] .for-iroh { display: none; }
+  .cfg-actions { display: flex; gap: 8px; }
+  .ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .ghost:hover { color: var(--text); }
+  .hint { margin: 0; font-size: 12px; color: var(--pending); }
+  .hint code { font-family: var(--mono); font-size: 11px; }
+  [hidden] { display: none !important; }
   #fatal[hidden] { display: none; }
   #fatal { position: fixed; inset: 0; background: var(--bg); display: grid; place-items: center; padding: 16px; text-align: center; }
   @media (max-width: 900px) {
@@ -113,6 +124,22 @@
 <main>
   <div id="shell-wrap"><div id="shell"></div></div>
   <aside>
+    <h2>Grainlift service</h2>
+    <form id="cfg-form" class="cfg">
+      <label class="for-iroh">Iroh endpoint ID
+        <input id="cfg-iroh" spellcheck="false" autocomplete="off" placeholder="64-character hex EndpointId of grainlift-server">
+      </label>
+      <label class="for-http">HTTP service URL
+        <input id="cfg-http" spellcheck="false" autocomplete="off" placeholder="grainlift+https://…">
+      </label>
+      <div class="cfg-actions">
+        <button type="submit" class="run">Connect</button>
+        <button type="button" id="cfg-share" class="ghost">Copy link</button>
+      </div>
+      <p id="cfg-hint" class="hint" hidden>Enter the Iroh endpoint ID printed by your grainlift-server
+        (<code>Grainlift listening endpoint_id=…</code>) to attach its <code>postgres</code> and <code>sqlite_demo</code> targets.</p>
+    </form>
+
     <h2>Connection</h2>
     <ul class="status">
       <li id="st-engine" data-state="pending"><span class="dot"></span><span class="label">Engine</span><span class="value">starting…</span></li>

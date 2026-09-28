@@ -13,35 +13,83 @@ Terminal.prototype.open = function (element) {
     return openTerminal.call(this, element);
 };
 
-const params = new URLSearchParams(location.search);
-const transport = params.get('transport') === 'iroh' ? 'iroh' : 'http';
-const httpServer = params.get('server') || 'grainlift+http://127.0.0.1:8484';
-// Test-only browser Iroh identity for the demo. Its EndpointId
-// (17901aeedc9d6b11dbdb1c341f2650bd7d0d58c6fb9e54966e7be0499f242cb5) is what
-// scripts/test-server.sh must map with GRAINLIFT_IROH_PRINCIPAL.
-const DEMO_IROH_KEY = 'd0ea13d2a598d0e2f6729c8b45e5994df3269789c9cf3296e7113e0389317bb8';
-const irohKey = params.get('irohKey') || DEMO_IROH_KEY;
-// The server's EndpointId: ?irohServer=, else the local test server's record.
-let irohServer = params.get('irohServer') || '';
-if (!irohServer && params.get('transport') === 'iroh') {
-    try {
-        irohServer = (await (await fetch('iroh-endpoint.json')).json()).endpoint_id;
-    } catch {
-        irohServer = '';
-    }
-}
-const token = params.get('token') || 'grainlift-test-token';
-const repo = `${location.origin}/repo`;
-const serverUri = transport === 'iroh' ? `grainlift+iroh://${irohServer}` : httpServer;
-const auth = transport === 'iroh' ? '' : `, BEARER_TOKEN '${token}'`;
-const connectAuth = transport === 'iroh' ? '' : `, 'bearer_token': '${token}'`;
-
 const $ = (id) => document.getElementById(id);
 const setStatus = (id, state, text) => {
     const el = $(id);
     el.dataset.state = state;
     el.querySelector('.value').textContent = text;
 };
+
+const params = new URLSearchParams(location.search);
+const isLocal = ['127.0.0.1', 'localhost'].includes(location.hostname);
+const stored = (key) => {
+    try {
+        return localStorage.getItem(`grainlift-demo.${key}`) || '';
+    } catch {
+        return '';
+    }
+};
+const store = (key, value) => {
+    try {
+        localStorage.setItem(`grainlift-demo.${key}`, value);
+    } catch {
+        // storage unavailable: settings last for this page load only
+    }
+};
+// Iroh by default on the hosted demo (a browser page cannot reach a local
+// HTTP service); HTTP by default when served locally.
+const transport = (params.get('transport') || stored('transport') || (isLocal ? 'http' : 'iroh')) === 'iroh' ? 'iroh' : 'http';
+const httpServer = params.get('server') || stored('server') || 'grainlift+http://127.0.0.1:8484';
+// The browser's Iroh identity: fresh per page unless ?irohKey= pins one.
+const irohKey = params.get('irohKey') || '';
+// The grainlift server's Iroh EndpointId: ?irohServer=, the last one used, or
+// (served locally) the test server's published record.
+let irohServer = (params.get('irohServer') || stored('irohServer')).trim().toLowerCase();
+if (!irohServer && transport === 'iroh' && isLocal) {
+    try {
+        irohServer = (await (await fetch('iroh-endpoint.json')).json()).endpoint_id;
+    } catch {
+        irohServer = '';
+    }
+}
+const irohValid = /^[0-9a-f]{64}$/.test(irohServer);
+const configured = transport === 'http' || irohValid;
+if (irohValid) store('irohServer', irohServer);
+const token = params.get('token') || 'grainlift-test-token';
+const repo = `${location.origin}/repo`;
+const serverUri = transport === 'iroh' ? `grainlift+iroh://${irohServer}` : httpServer;
+
+// Service settings form.
+$('cfg-iroh').value = irohServer;
+$('cfg-http').value = httpServer;
+$('cfg-form').dataset.transport = transport;
+$('cfg-form').onsubmit = (event) => {
+    event.preventDefault();
+    const next = new URLSearchParams(params);
+    next.set('transport', transport);
+    if (transport === 'iroh') {
+        next.set('irohServer', $('cfg-iroh').value.trim().toLowerCase());
+    } else {
+        next.set('server', $('cfg-http').value.trim());
+        store('server', $('cfg-http').value.trim());
+    }
+    location.search = `?${next}`;
+};
+$('cfg-share').onclick = async () => {
+    const link = new URL(location.pathname, location.origin);
+    link.searchParams.set('transport', transport);
+    if (transport === 'iroh') link.searchParams.set('irohServer', irohServer);
+    else link.searchParams.set('server', httpServer);
+    await navigator.clipboard.writeText(link.href);
+    $('cfg-share').textContent = 'Copied';
+    setTimeout(() => ($('cfg-share').textContent = 'Copy link'), 1500);
+};
+if (!configured) {
+    $('cfg-hint').hidden = false;
+    for (const id of ['st-pg', 'st-demo']) setStatus(id, 'error', 'no service configured');
+}
+const auth = transport === 'iroh' ? '' : `, BEARER_TOKEN '${token}'`;
+const connectAuth = transport === 'iroh' ? '' : `, 'bearer_token': '${token}'`;
 
 // ---------------------------------------------------------------------------
 // Engine: always the cross-origin-isolated (wasm_threads) bundle.
@@ -54,7 +102,7 @@ const worker = new Worker(base + 'duckdb-browser-coi.worker.js');
 
 let irohReady = Promise.resolve(null);
 {
-    const adapter = new Worker(`iroh-adapter.js?key=${encodeURIComponent(irohKey)}`, { type: 'module' });
+    const adapter = new Worker(`iroh-adapter.js${irohKey ? `?key=${encodeURIComponent(irohKey)}` : ''}`, { type: 'module' });
     irohReady = new Promise((resolve) => {
         adapter.addEventListener('message', (event) => {
             if (event.data?.type === 'grainlift-iroh-node') {
@@ -79,6 +127,7 @@ for (const a of document.querySelectorAll('[data-transport]')) {
     const next = new URLSearchParams(params);
     next.set('transport', a.dataset.transport);
     a.href = `?${next}`;
+    a.onclick = () => store('transport', a.dataset.transport);
 }
 
 async function resolveDatabase(progress) {
@@ -118,11 +167,13 @@ async function watchSetup(db) {
 const setup = [
     `INSTALL grainlift FROM '${repo}';`,
     `LOAD grainlift;`,
+];
+if (configured) setup.push(
     `ATTACH '${serverUri}' AS pg (TYPE grainlift, TARGET 'postgres'${auth});`,
     `ATTACH '${serverUri}' AS demo (TYPE grainlift, TARGET 'sqlite_demo'${auth});`,
     `SET VARIABLE pgc = (SELECT grainlift_connect({'uri': '${serverUri}', 'target': 'postgres'${connectAuth}}));`,
     `SELECT database, schema, name, column_names FROM (SHOW ALL TABLES) WHERE database IN ('pg', 'demo');`,
-];
+);
 // Mirrors extraswaps() in the shell: ' ' <-> '-', ';' <-> '~'.
 const swap = (s) => [...s].map((c) => ({ ' ': '-', '-': ' ', ';': '~', '~': ';' })[c] ?? c).join('');
 history.replaceState(null, '', location.pathname + location.search + '#queries=v0,' + setup.map((q) => encodeURIComponent(swap(q))).join(','));

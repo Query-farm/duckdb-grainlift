@@ -140,4 +140,25 @@ For Iroh, start the test server with
 (the demo page's built-in, test-only browser key); `serve.py` publishes the
 server's endpoint ID so `?transport=iroh` needs no other parameters.
 
+### Hosted demo
+
+`deploy/publish.sh` publishes the demo to
+<https://grainlift-demo.query-farm.services/>: the site files and the COI
+extension go to the `grainlift-demo` R2 bucket, and a small Worker
+(`deploy/worker.js`) serves them with the COOP/COEP headers cross-origin
+isolation needs and owns the custom domain.
+
+The hosted page defaults to Iroh; enter the grainlift-server's Iroh endpoint ID
+in the sidebar (or link `?irohServer=<id>`). To demo your local databases,
+run the test server open (no authentication, Iroh enabled) and share the link
+privately:
+
+```sh
+GRAINLIFT_OPEN=1 GRAINLIFT_IROH=1 GRAINLIFT_SOURCE_DIR=~/Development/grainlift \
+  scripts/test-server.sh 8484
+# endpoint ID: $TMPDIR/grainlift-test-server/iroh-endpoint.json
+```
+
+`GRAINLIFT_OPEN=1` lets anyone who knows the endpoint ID use every target.
+
 See [PLAN.md](PLAN.md) for the design.

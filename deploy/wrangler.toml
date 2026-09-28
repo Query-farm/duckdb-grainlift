@@ -1,0 +1,12 @@
+name = "grainlift-demo"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = false
+
+[[r2_buckets]]
+binding = "SITE"
+bucket_name = "grainlift-demo"
+
+[[routes]]
+pattern = "grainlift-demo.query-farm.services"
+custom_domain = true
