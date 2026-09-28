@@ -74,7 +74,10 @@ if [[ "${GRAINLIFT_PG:-1}" != "0" && -x "$PG_BIN/initdb" ]]; then
     "$PG_BIN/initdb" -D "$PG_DATA" -U postgres --auth=trust --encoding=UTF8 --no-locale >/dev/null
     "$PG_BIN/pg_ctl" -D "$PG_DATA" -l "$WORK_DIR/pg.log" -w \
         -o "-p ${PG_PORT} -c listen_addresses=127.0.0.1 -k ${PG_DATA}" start >/dev/null
-    trap '"$PG_BIN/pg_ctl" -D "$PG_DATA" stop -m fast >/dev/null 2>&1 || true' EXIT
+    # Stop only the postmaster this instance started: a restarted script may
+    # already own a new cluster in the same data directory.
+    PG_PID="$(head -1 "$PG_DATA/postmaster.pid")"
+    trap '[[ "$(head -1 "$PG_DATA/postmaster.pid" 2>/dev/null)" == "$PG_PID" ]] && "$PG_BIN/pg_ctl" -D "$PG_DATA" stop -m fast >/dev/null 2>&1 || true' EXIT
     "$PG_BIN/createdb" -h 127.0.0.1 -p "$PG_PORT" -U postgres grainlift
     "$PG_BIN/psql" -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$PG_PORT" -U postgres -d grainlift \
         -f "$(dirname "$0")/pg_seed.sql" >/dev/null
