@@ -1,0 +1,1 @@
+{"description": "grainlift: do not skip tests whose errors mention HTTP (grainlift errors carry the transport name)", "skip_error_messages": ["__never_skip__"]}

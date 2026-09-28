@@ -1,0 +1,66 @@
+# name: test/sql/grainlift_storage_transactions.test
+# description: real transactions for attached ADBC databases (BEGIN/COMMIT/ROLLBACK)
+# group: [adbc]
+
+require grainlift
+
+require httpfs
+
+require-env GRAINLIFT_URI
+
+require-env GRAINLIFT_TOKEN
+
+# Clean slate
+statement ok
+SET VARIABLE c = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_storage_txn.db'}));
+
+statement ok
+CALL grainlift_execute(getvariable('c')::BIGINT, 'DROP TABLE IF EXISTS t');
+
+statement ok
+CALL grainlift_disconnect(getvariable('c')::BIGINT);
+
+statement ok
+ATTACH '${GRAINLIFT_URI}' AS w (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_storage_txn.db');
+
+# Seed with 3 committed rows
+statement ok
+CREATE TABLE w.t AS SELECT i AS id FROM range(3) t(i);
+
+query I
+SELECT COUNT(*) FROM w.t;
+----
+3
+
+# ROLLBACK must undo the insert
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO w.t SELECT i AS id FROM range(100, 110) t(i);
+
+statement ok
+ROLLBACK;
+
+query I
+SELECT COUNT(*) FROM w.t;
+----
+3
+
+# COMMIT must persist the insert
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO w.t SELECT i AS id FROM range(100, 110) t(i);
+
+statement ok
+COMMIT;
+
+query I
+SELECT COUNT(*) FROM w.t;
+----
+13
+
+statement ok
+DETACH w;

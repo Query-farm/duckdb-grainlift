@@ -1,0 +1,41 @@
+# name: test/sql/grainlift_storage_readonly.test
+# description: writes to a READ_ONLY attached ADBC database are rejected
+# group: [adbc]
+
+require grainlift
+
+require httpfs
+
+require-env GRAINLIFT_URI
+
+require-env GRAINLIFT_TOKEN
+
+statement ok
+SET VARIABLE c = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_ro.db'}));
+
+statement ok
+CALL grainlift_execute(getvariable('c')::BIGINT, 'DROP TABLE IF EXISTS t');
+
+statement ok
+CALL grainlift_execute(getvariable('c')::BIGINT, 'CREATE TABLE t (id INTEGER)');
+
+statement ok
+CALL grainlift_execute(getvariable('c')::BIGINT, 'INSERT INTO t VALUES (1), (2)');
+
+statement ok
+CALL grainlift_disconnect(getvariable('c')::BIGINT);
+
+statement ok
+ATTACH '${GRAINLIFT_URI}' AS ro (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_ro.db', READ_ONLY);
+
+query I
+SELECT COUNT(*) FROM ro.t;
+----
+2
+
+statement error
+INSERT INTO ro.t VALUES (3);
+----
+
+statement ok
+DETACH ro;

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>grainlift in haybarn-wasm</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; }
+  textarea { width: 100%; height: 5em; font-family: ui-monospace, monospace; }
+  pre#log { background: #f4f4f4; padding: 8px; max-height: 20em; overflow: auto; white-space: pre-wrap; }
+  table { border-collapse: collapse; margin: 8px 0; }
+  #examples button { margin: 0 4px 4px 0; }
+  #checks pre { margin: 0; white-space: pre-wrap; }
+  td, th { border: 1px solid #ccc; padding: 2px 6px; font-family: ui-monospace, monospace; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>grainlift × haybarn-wasm</h1>
+<p>Status: <span id="status">loading…</span></p>
+<p>Databases: <code>demo</code> (SQLite target <code>sqlite_demo</code>) and <code>pg</code> (PostgreSQL target <code>postgres</code>) are attached;
+<code>getvariable('conn')</code> / <code>getvariable('pgconn')</code> are connection handles for <code>grainlift_scan</code>.
+Use <code>?transport=iroh&amp;irohServer=&lt;endpoint-id&gt;&amp;irohKey=&lt;hex&gt;</code> for Iroh.</p>
+<div id="examples"></div>
+<p><button id="pgchecks">Run PostgreSQL checks</button></p>
+<div id="checks"></div>
+<textarea id="query"></textarea>
+<button id="run">Run</button>
+<pre id="log"></pre>
+<div id="results"></div>
+<script type="module" src="app.bundle.js"></script>
+</body>
+</html>

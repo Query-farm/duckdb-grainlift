@@ -1,0 +1,221 @@
+# name: test/sql/grainlift_postgres.test
+# description: PostgreSQL through grainlift (the `postgres` target of scripts/test-server.sh)
+# group: [grainlift]
+
+require grainlift
+
+require httpfs
+
+require-env GRAINLIFT_URI
+
+require-env GRAINLIFT_TOKEN
+
+require-env GRAINLIFT_PG
+
+# ============================================
+# Connection and remote identity
+# ============================================
+
+statement ok
+SET VARIABLE pg = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'postgres', 'bearer_token': '${GRAINLIFT_TOKEN}'}));
+
+query I
+SELECT info_value FROM grainlift_info(getvariable('pg')::BIGINT) WHERE info_name = 'vendor_name';
+----
+PostgreSQL
+
+# ============================================
+# grainlift_scan: schema inference, types, NULLs, parameters
+# ============================================
+
+query IIIIII
+SELECT * FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.customers ORDER BY id');
+----
+1	Ada Lovelace	ada@example.com	United Kingdom	2024-01-15	true
+2	Grace Hopper	grace@example.com	United States	2024-02-20	true
+3	Alan Turing	alan@example.com	United Kingdom	2024-03-05	false
+4	Katherine Johnson	NULL	United States	2024-04-11	false
+5	Edsger Dijkstra	edsger@example.com	Netherlands	2024-05-30	false
+6	Hedy Lamarr	hedy@example.com	Austria	2024-06-18	true
+
+query TT
+SELECT column_name, column_type FROM (DESCRIBE SELECT * FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.orders'));
+----
+id	BIGINT
+customer_id	INTEGER
+amount	VARCHAR
+ordered_at	TIMESTAMP WITH TIME ZONE
+status	VARCHAR
+weight_kg	DOUBLE
+
+# PostgreSQL placeholders are $n
+query IIIII
+SELECT id, amount, ordered_at, status, weight_kg
+FROM grainlift_scan(getvariable('pg')::BIGINT,
+    'SELECT id, amount, ordered_at, status, weight_kg FROM sales.orders WHERE customer_id = $1 AND status = $2 ORDER BY id LIMIT 3',
+    params := row(2, 'paid'));
+----
+1	79.19	2025-01-02 00:00:01+00	paid	0.1
+13	29.47	2025-01-14 00:00:13+00	paid	1.3
+25	979.75	2025-01-26 00:00:25+00	paid	2.5
+
+# Multi-batch result (50k rows)
+query III
+SELECT count(*), count(weight_kg), round(avg(weight_kg), 4)
+FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.orders');
+----
+50000	45000	25.0
+
+statement error
+SELECT * FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.no_such_table');
+----
+does not exist
+
+# ============================================
+# ATTACH: schemas, pushdown, joins, views
+# ============================================
+
+statement ok
+ATTACH '${GRAINLIFT_URI}' AS pgdb (TYPE grainlift, target 'postgres', bearer_token '${GRAINLIFT_TOKEN}');
+
+query II
+SELECT schema_name, table_name FROM duckdb_tables() WHERE database_name = 'pgdb' ORDER BY ALL;
+----
+public	measurements
+sales	customers
+sales	orders
+sales	revenue_by_country
+
+# Filters and projections are pushed down with PostgreSQL placeholders
+query IIII
+SELECT count(*), sum(amount::DECIMAL(12,2)), min(ordered_at), max(ordered_at)
+FROM pgdb.sales.orders WHERE status = 'shipped' AND customer_id IN (1, 2);
+----
+4167	2082219.46	2025-01-01 00:36:30+00	2025-12-31 13:16:54+00
+
+query I
+SELECT count(*) FROM pgdb.sales.orders WHERE ordered_at >= TIMESTAMPTZ '2025-12-01 00:00:00+00';
+----
+4243
+
+query I
+SELECT name FROM pgdb.sales.customers WHERE email IS NULL;
+----
+Katherine Johnson
+
+query II
+SELECT c.name, count(*) AS n
+FROM pgdb.sales.orders o JOIN pgdb.sales.customers c ON c.id = o.customer_id
+WHERE c.vip GROUP BY ALL ORDER BY n DESC, c.name;
+----
+Grace Hopper	8334
+Ada Lovelace	8333
+Hedy Lamarr	8333
+
+query IIII
+SELECT country, orders, revenue::DECIMAL(14,2), revenue::DECIMAL(14,2) > 0 FROM pgdb.sales.revenue_by_country ORDER BY country;
+----
+Austria	4167	2082234.73	true
+Netherlands	8333	4166750.00	true
+United Kingdom	16667	8331000.00	true
+United States	8333	4167890.27	true
+
+query III
+SELECT sensor, count(*), sum(CASE WHEN ok THEN 1 ELSE 0 END) FROM pgdb.public.measurements GROUP BY sensor ORDER BY sensor;
+----
+sensor-0	400	370
+sensor-1	400	369
+sensor-2	400	370
+sensor-3	400	369
+sensor-4	400	369
+
+query III
+SELECT min(taken_at), max(taken_at), round(sum(reading), 2) FROM pgdb.public.measurements;
+----
+2025-06-01 00:01:00	2025-06-02 09:20:00	24750.0
+
+# ============================================
+# Writes: CTAS/INSERT land in the attached schema; transactions
+# ============================================
+
+statement ok
+CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE IF EXISTS sales.returns');
+
+statement ok
+CREATE TABLE pgdb.sales.returns AS SELECT range::BIGINT AS order_id, 'damaged' AS reason FROM range(1, 301);
+
+statement ok
+INSERT INTO pgdb.sales.returns SELECT 1000 + range, 'late' FROM range(20);
+
+query II
+SELECT reason, count(*) FROM pgdb.sales.returns GROUP BY ALL ORDER BY 1;
+----
+damaged	300
+late	20
+
+# The rows are in PostgreSQL's `sales` schema, not `public`
+query I
+SELECT count(*) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.returns');
+----
+320
+
+statement error
+SELECT count(*) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM public.returns');
+----
+does not exist
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO pgdb.sales.returns VALUES (99999, 'rolled back');
+
+statement ok
+ROLLBACK;
+
+query I
+SELECT count(*) FROM pgdb.sales.returns;
+----
+320
+
+statement ok
+BEGIN;
+
+statement ok
+INSERT INTO pgdb.sales.returns VALUES (99999, 'committed');
+
+statement ok
+COMMIT;
+
+query I
+SELECT count(*) FROM pgdb.sales.returns WHERE reason = 'committed';
+----
+1
+
+# grainlift_insert into a PostgreSQL table
+statement ok
+CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE IF EXISTS public.bulk');
+
+query I
+SELECT * FROM grainlift_insert(getvariable('pg')::BIGINT, 'bulk', (SELECT range AS id, range * 2 AS doubled FROM range(10000)), mode := 'create');
+----
+10000
+
+query II
+SELECT count(*), sum(doubled) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM public.bulk');
+----
+10000	99990000
+
+statement ok
+CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE sales.returns');
+
+statement ok
+CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE public.bulk');
+
+statement ok
+DETACH pgdb;
+
+query I
+CALL grainlift_disconnect(getvariable('pg')::BIGINT);
+----
+true

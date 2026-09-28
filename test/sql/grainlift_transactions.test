@@ -1,0 +1,71 @@
+# name: test/sql/grainlift_transactions.test
+# description: test adbc transaction functions (commit, rollback, set_autocommit)
+# group: [adbc]
+
+require grainlift
+
+require httpfs
+
+require-env GRAINLIFT_URI
+
+require-env GRAINLIFT_TOKEN
+
+# Test grainlift_commit with invalid connection handle
+statement error
+CALL grainlift_commit(12345);
+----
+Invalid Input Error: grainlift_commit: Invalid connection handle: 12345
+
+# Test grainlift_rollback with invalid connection handle
+statement error
+CALL grainlift_rollback(12345);
+----
+Invalid Input Error: grainlift_rollback: Invalid connection handle: 12345
+
+# Test grainlift_set_autocommit with invalid connection handle
+statement error
+CALL grainlift_set_autocommit(12345, false);
+----
+Invalid Input Error: grainlift_set_autocommit: Invalid connection handle: 12345
+
+# Create a connection for transaction tests
+statement ok
+SET VARIABLE conn_id = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': ':memory:'}));
+
+# Create a test table
+statement ok
+CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'CREATE TABLE tx_test (id INTEGER, value TEXT)');
+
+# Test rollback - disable autocommit, insert, rollback
+query I
+CALL grainlift_set_autocommit(getvariable('conn_id')::BIGINT, false);
+----
+true
+
+statement ok
+CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'INSERT INTO tx_test VALUES (1, ''will rollback'')');
+
+# Rollback the transaction
+query I
+CALL grainlift_rollback(getvariable('conn_id')::BIGINT);
+----
+true
+
+# Test commit - insert data and commit
+statement ok
+CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'INSERT INTO tx_test VALUES (2, ''committed'')');
+
+query I
+CALL grainlift_commit(getvariable('conn_id')::BIGINT);
+----
+true
+
+# Re-enable autocommit
+query I
+CALL grainlift_set_autocommit(getvariable('conn_id')::BIGINT, true);
+----
+true
+
+# Clean up
+statement ok
+CALL grainlift_disconnect(getvariable('conn_id')::BIGINT);

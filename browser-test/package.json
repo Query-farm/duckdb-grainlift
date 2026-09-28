@@ -1,0 +1,15 @@
+{
+  "name": "grainlift-browser-test",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild app.js --bundle --format=esm --outfile=site/app.bundle.js && cp node_modules/@haybarn/haybarn-wasm/dist/duckdb-coi.wasm node_modules/@haybarn/haybarn-wasm/dist/duckdb-browser-coi.worker.js node_modules/@haybarn/haybarn-wasm/dist/duckdb-browser-coi.pthread.worker.js node_modules/@haybarn/haybarn-wasm/dist/duckdb-eh.wasm node_modules/@haybarn/haybarn-wasm/dist/duckdb-browser-eh.worker.js site/"
+  },
+  "dependencies": {
+    "@haybarn/haybarn-wasm": "1.5.5-rc6",
+    "apache-arrow": "^17.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
