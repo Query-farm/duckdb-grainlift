@@ -120,4 +120,24 @@ browser. For Iroh, start the test server with
 `?transport=iroh&irohServer=<server endpoint id>&irohKey=<browser key hex>`
 (the server's id is in `$TMPDIR/grainlift-test-server/iroh-endpoint.json`).
 
+### Demo: the Haybarn shell with grainlift
+
+`browser-test/site/shell.html` is the demoable page: the Haybarn DuckDB-WASM
+shell (xterm) with the grainlift extension loaded and the PostgreSQL (`pg`) and
+SQLite (`demo`) targets attached at startup, a live connection panel, and a
+guided list of queries whose **Run** button types them into the shell. The
+header switches between HTTP and Iroh.
+
+```sh
+cd browser-test
+./build-shell.sh          # once: builds the shell wasm from ~/Development/haybarn/haybarn-wasm
+npm install && npm run build
+python3 serve.py 8080     # then open http://127.0.0.1:8080/shell.html
+```
+
+For Iroh, start the test server with
+`GRAINLIFT_IROH_PRINCIPAL=17901aeedc9d6b11dbdb1c341f2650bd7d0d58c6fb9e54966e7be0499f242cb5`
+(the demo page's built-in, test-only browser key); `serve.py` publishes the
+server's endpoint ID so `?transport=iroh` needs no other parameters.
+
 See [PLAN.md](PLAN.md) for the design.

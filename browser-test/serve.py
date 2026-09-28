@@ -6,10 +6,16 @@ import http.server, os, sys
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 REPO = os.environ.get('GRAINLIFT_REPO', os.path.join(ROOT, 'repo'))
+# Written by scripts/test-server.sh when its Iroh listener is enabled.
+IROH_ENDPOINT = os.path.join(
+    os.environ.get('GRAINLIFT_TEST_DIR', os.path.join(os.environ.get('TMPDIR', '/tmp'), 'grainlift-test-server')),
+    'iroh-endpoint.json')
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path):
         clean = path.split('?', 1)[0].split('#', 1)[0]
+        if clean == '/iroh-endpoint.json':
+            return IROH_ENDPOINT
         if clean.startswith('/repo/'):
             return os.path.join(REPO, clean[len('/repo/'):])
         return os.path.join(ROOT, 'site', clean.lstrip('/'))

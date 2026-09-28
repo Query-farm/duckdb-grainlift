@@ -82,6 +82,11 @@ cat > "$CONFIG" <<TOML
 listen = "127.0.0.1:${PORT}"
 require_authentication = true
 cors_origins = "${CORS_ORIGIN}"
+# Browser pages that are reloaded never close their sessions; keep the quota
+# generous and let abandoned sessions expire quickly.
+session_ttl_seconds = 600
+max_sessions = 4096
+max_sessions_per_principal = 1024
 
 [auth.static_bearer_tokens]
 grainlift-test-token = "tester"

@@ -23,3 +23,7 @@ browser-test/site/app.bundle.js
 browser-test/site/duckdb-*
 browser-test/site/iroh/
 .cache/
+browser-test/shell-build/
+browser-test/site/shell_bg.wasm
+browser-test/site/xterm.css
+browser-test/site/shell-demo.bundle.js
