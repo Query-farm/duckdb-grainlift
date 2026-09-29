@@ -72,19 +72,21 @@ lets `ATTACH '<uri>' AS x (TYPE grainlift)` connect with no further options.
 
 ## Building
 
-Sources: this repo, the `duckdb` submodule (Haybarn engine, pinned to the
-revision Haybarn-WASM ships), and a grainlift checkout (`GRAINLIFT_SOURCE_DIR`,
-default `./grainlift`), which pins vgi-rpc-rust.
+Sources: this repo and its submodules — `duckdb` (the Haybarn engine, pinned
+to the revision Haybarn-WASM ships), `extension-ci-tools`, and `grainlift` (the
+driver, which pins vgi-rpc-rust). `GRAINLIFT_SOURCE_DIR` overrides the grainlift
+checkout.
 
 ```sh
+git submodule update --init --recursive
+
 # Native (loads httpfs for HTTP); vcpkg provides openssl/curl for httpfs.
-VCPKG_TOOLCHAIN_PATH=~/Development/vcpkg/scripts/buildsystems/vcpkg.cmake \
-GRAINLIFT_SOURCE_DIR=~/Development/grainlift GEN=ninja make release
+VCPKG_TOOLCHAIN_PATH=~/Development/vcpkg/scripts/buildsystems/vcpkg.cmake GEN=ninja make release
 
 # DuckDB-WASM, COI (wasm_threads) and eh; needs emsdk 5.0.7 and
 # rustup toolchain nightly-2026-05-20 with rust-src + wasm32-unknown-emscripten.
-GRAINLIFT_SOURCE_DIR=~/Development/grainlift scripts/build-wasm.sh wasm_threads
-GRAINLIFT_SOURCE_DIR=~/Development/grainlift scripts/build-wasm.sh wasm_eh
+scripts/build-wasm.sh wasm_threads
+scripts/build-wasm.sh wasm_eh
 ```
 
 The Rust driver is built by `cmake/grainlift_rust.cmake` (`cargo rustc
@@ -99,7 +101,7 @@ legacy exception-handling import remains.
 # A local grainlift-server with SQLite targets (`dbc install sqlite`) and, when
 # PostgreSQL's initdb is available, a throwaway PostgreSQL cluster on port 55432
 # seeded from scripts/pg_seed.sql as the `postgres` target (`dbc install postgresql`).
-GRAINLIFT_SOURCE_DIR=~/Development/grainlift scripts/test-server.sh 8484 http://127.0.0.1:8080
+scripts/test-server.sh 8484 http://127.0.0.1:8080
 
 GRAINLIFT_URI=grainlift+http://127.0.0.1:8484 GRAINLIFT_TOKEN=grainlift-test-token GRAINLIFT_PG=1 \
   ./build/release/test/unittest --test-config test/configs/grainlift.json "test/sql/*"
@@ -135,10 +137,10 @@ npm install && npm run build
 python3 serve.py 8080     # then open http://127.0.0.1:8080/shell.html
 ```
 
-For Iroh, start the test server with
-`GRAINLIFT_IROH_PRINCIPAL=17901aeedc9d6b11dbdb1c341f2650bd7d0d58c6fb9e54966e7be0499f242cb5`
-(the demo page's built-in, test-only browser key); `serve.py` publishes the
-server's endpoint ID so `?transport=iroh` needs no other parameters.
+For Iroh, start the test server with `GRAINLIFT_IROH=1` (plus `GRAINLIFT_OPEN=1`,
+or `GRAINLIFT_IROH_PRINCIPAL=<browser endpoint id>` with `?irohKey=<hex>` to pin
+the browser identity); `serve.py` publishes the server's endpoint ID so
+`?transport=iroh` needs no other parameters locally.
 
 ### Hosted demo
 
@@ -154,8 +156,7 @@ run the test server open (no authentication, Iroh enabled) and share the link
 privately:
 
 ```sh
-GRAINLIFT_OPEN=1 GRAINLIFT_IROH=1 GRAINLIFT_SOURCE_DIR=~/Development/grainlift \
-  scripts/test-server.sh 8484
+GRAINLIFT_OPEN=1 GRAINLIFT_IROH=1 scripts/test-server.sh 8484
 # endpoint ID: $TMPDIR/grainlift-test-server/iroh-endpoint.json
 ```
 
