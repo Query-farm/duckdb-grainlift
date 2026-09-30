@@ -55,6 +55,8 @@ public:
 	ClientProperties client_properties;
 	vector<LogicalType> column_types;
 	vector<string> column_names;
+	//! CREATE TABLE IF NOT EXISTS ... AS on an existing table: discard the input.
+	bool skip = false;
 };
 
 unique_ptr<GlobalSinkState> AdbcInsert::GetGlobalSinkState(ClientContext &context) const {
@@ -94,6 +96,19 @@ unique_ptr<GlobalSinkState> AdbcInsert::GetGlobalSinkState(ClientContext &contex
 		target_table = info->Base().table;
 		target_schema = schema_ref.name;
 		ingest_mode = "adbc.ingest.mode.create";
+		auto &table_set = const_cast<AdbcSchemaEntry &>(schema_ref).GetTableSet();
+		if (table_set.GetEntry(AdbcTransaction::Get(context, catalog), target_table)) {
+			switch (info->Base().on_conflict) {
+			case OnCreateConflict::IGNORE_ON_CONFLICT:
+				state->skip = true;
+				return std::move(state);
+			case OnCreateConflict::REPLACE_ON_CONFLICT:
+				ingest_mode = "adbc.ingest.mode.replace";
+				break;
+			default:
+				throw CatalogException("Table with name \"%s\" already exists!", target_table);
+			}
+		}
 
 		// Get types from the bound create info
 		for (auto &col : info->Base().columns.Logical()) {
@@ -139,7 +154,7 @@ unique_ptr<GlobalSinkState> AdbcInsert::GetGlobalSinkState(ClientContext &contex
 SinkResultType AdbcInsert::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
 	auto &state = input.global_state.Cast<AdbcStorageInsertGlobalState>();
 
-	if (chunk.size() == 0) {
+	if (state.skip || chunk.size() == 0) {
 		return SinkResultType::NEED_MORE_INPUT;
 	}
 
@@ -169,6 +184,9 @@ SinkResultType AdbcInsert::Sink(ExecutionContext &context, DataChunk &chunk, Ope
 SinkFinalizeType AdbcInsert::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                       OperatorSinkFinalizeInput &input) const {
 	auto &state = input.global_state.Cast<AdbcStorageInsertGlobalState>();
+	if (state.skip) {
+		return SinkFinalizeType::READY;
+	}
 
 	// Signal end of input and wait for the background ExecuteUpdate to finish
 	// draining the stream. Rethrows as IOException if the consumer errored.

@@ -89,6 +89,10 @@ public:
 
 	void ClearCache();
 
+	//! CREATE TABLE goes through ADBC bulk ingestion, which cannot express
+	//! constraints, defaults or generated columns.
+	ErrorData SupportsCreateTable(BoundCreateTableInfo &info) override;
+
 	//! Whether or not this catalog should search a specific type with the standard priority
 	CatalogLookupBehavior CatalogTypeLookupRule(CatalogType type) const override {
 		switch (type) {

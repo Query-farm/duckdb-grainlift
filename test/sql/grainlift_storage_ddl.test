@@ -1,0 +1,187 @@
+# name: test/sql/grainlift_storage_ddl.test
+# description: CREATE TABLE / CREATE TABLE AS / DROP through ATTACH
+# group: [grainlift]
+
+require grainlift
+
+require httpfs
+
+require-env GRAINLIFT_URI
+
+require-env GRAINLIFT_TOKEN
+
+statement ok
+SET VARIABLE setup = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_storage_ddl.db'}));
+
+statement ok
+CALL grainlift_execute(getvariable('setup')::BIGINT, 'DROP TABLE IF EXISTS t1');
+
+statement ok
+CALL grainlift_execute(getvariable('setup')::BIGINT, 'DROP TABLE IF EXISTS t2');
+
+statement ok
+ATTACH '${GRAINLIFT_URI}' AS lite (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_storage_ddl.db');
+
+# ---- CREATE TABLE (through ADBC ingestion of an empty stream) ----
+
+statement ok
+CREATE TABLE lite.t1 (a INTEGER, b BIGINT);
+
+statement ok
+INSERT INTO lite.t1 VALUES (1, 10), (2, 20);
+
+query II
+SELECT * FROM lite.t1 ORDER BY a;
+----
+1	10
+2	20
+
+statement error
+CREATE TABLE lite.t1 (a INTEGER);
+----
+Table with name "t1" already exists!
+
+# IF NOT EXISTS leaves the existing table alone
+statement ok
+CREATE TABLE IF NOT EXISTS lite.t1 (z INTEGER);
+
+query I
+SELECT count(*) FROM lite.t1;
+----
+2
+
+statement ok
+CREATE OR REPLACE TABLE lite.t1 (x INTEGER);
+
+query I
+SELECT count(*) FROM lite.t1;
+----
+0
+
+# What ADBC ingestion cannot express is rejected, not silently dropped
+statement error
+CREATE TABLE lite.pk (id INTEGER PRIMARY KEY);
+----
+grainlift tables cannot declare constraints
+
+statement error
+CREATE TABLE lite.nn (id INTEGER NOT NULL);
+----
+grainlift tables cannot declare constraints
+
+statement error
+CREATE TABLE lite.def (id INTEGER DEFAULT 1);
+----
+grainlift tables cannot declare column defaults
+
+# ---- CREATE TABLE AS on-conflict handling ----
+
+statement error
+CREATE TABLE lite.t1 AS SELECT 1 AS x;
+----
+Table with name "t1" already exists!
+
+statement ok
+CREATE TABLE IF NOT EXISTS lite.t1 AS SELECT 99 AS x;
+
+query I
+SELECT count(*) FROM lite.t1;
+----
+0
+
+statement ok
+CREATE OR REPLACE TABLE lite.t1 AS SELECT range AS x FROM range(5);
+
+query II
+SELECT count(*), sum(x) FROM lite.t1;
+----
+5	10
+
+statement ok
+CREATE TABLE lite.t2 AS SELECT range AS id FROM range(3);
+
+query I
+SELECT count(*) FROM lite.t2;
+----
+3
+
+# ---- DROP ----
+
+statement ok
+DROP TABLE lite.t1;
+
+query I
+SELECT count(*) FROM duckdb_tables() WHERE database_name = 'lite' AND table_name = 't1';
+----
+0
+
+statement error
+DROP TABLE lite.t1;
+----
+Table with name t1 does not exist!
+
+statement ok
+DROP TABLE IF EXISTS lite.t1;
+
+statement ok
+DROP TABLE lite.t2;
+
+statement ok
+DETACH lite;
+
+statement ok
+CALL grainlift_disconnect(getvariable('setup')::BIGINT);
+
+# ---- PostgreSQL: schema-qualified DDL, transactional DDL ----
+
+require-env GRAINLIFT_PG
+
+statement ok
+SET VARIABLE pg = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'postgres', 'bearer_token': '${GRAINLIFT_TOKEN}'}));
+
+statement ok
+CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE IF EXISTS sales.ddl_t');
+
+statement ok
+ATTACH '${GRAINLIFT_URI}' AS pgdb (TYPE grainlift, target 'postgres', bearer_token '${GRAINLIFT_TOKEN}');
+
+statement ok
+CREATE TABLE pgdb.sales.ddl_t (id BIGINT, name VARCHAR, ts TIMESTAMP);
+
+statement ok
+INSERT INTO pgdb.sales.ddl_t VALUES (1, 'one', TIMESTAMP '2026-01-01 00:00:00');
+
+# Created in the attached schema (sales), not the remote default (public)
+query II
+SELECT id, name FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT id, name FROM sales.ddl_t');
+----
+1	one
+
+# PostgreSQL DDL is transactional: a rolled-back CREATE leaves nothing behind
+statement ok
+BEGIN;
+
+statement ok
+CREATE TABLE pgdb.sales.ddl_rolled_back (a INTEGER);
+
+statement ok
+ROLLBACK;
+
+query I
+SELECT count(*) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM information_schema.tables WHERE table_name = ''ddl_rolled_back''');
+----
+0
+
+statement ok
+DROP TABLE pgdb.sales.ddl_t;
+
+query I
+SELECT count(*) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM information_schema.tables WHERE table_name = ''ddl_t''');
+----
+0
+
+statement ok
+DETACH pgdb;
+
+statement ok
+CALL grainlift_disconnect(getvariable('pg')::BIGINT);

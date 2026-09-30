@@ -104,6 +104,25 @@ void AdbcCatalog::ClearCache() {
 	schemas.ClearEntries();
 }
 
+ErrorData AdbcCatalog::SupportsCreateTable(BoundCreateTableInfo &info) {
+	auto &base = info.Base();
+	static const char *hint = "; create the table with grainlift_execute to use the remote database's full DDL";
+	if (!base.constraints.empty()) {
+		return ErrorData(ExceptionType::BINDER,
+		                 string("grainlift tables cannot declare constraints (PRIMARY KEY, UNIQUE, NOT NULL, "
+		                        "CHECK, FOREIGN KEY)") +
+		                     hint);
+	}
+	for (auto &column : base.columns.Logical()) {
+		if (column.HasDefaultValue() || column.Generated()) {
+			return ErrorData(ExceptionType::BINDER,
+			                 "grainlift tables cannot declare column defaults or generated columns (column \"" +
+			                     column.GetName() + "\")" + hint);
+		}
+	}
+	return ErrorData();
+}
+
 // PlanInsert and PlanCreateTableAs are implemented in grainlift_insert.cpp
 
 PhysicalOperator &AdbcCatalog::PlanDelete(ClientContext &context, PhysicalPlanGenerator &planner, LogicalDelete &op,

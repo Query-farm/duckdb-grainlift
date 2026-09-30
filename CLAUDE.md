@@ -70,4 +70,11 @@ grainlift-demo.query-farm.services).
   with `test/configs/grainlift.json`.
 - The ADBC PostgreSQL driver returns every `numeric` as `arrow.opaque`
   (vendor PostgreSQL, type numeric) over utf8, with no precision/scale anywhere
-  (not in the schema, `GetObjects`, or `GetTableSchema`).
+  (not in the schema, `GetObjects`, or `GetTableSchema`); upstream
+  apache/arrow-adbc#4798 adds `POSTGRESQL:typmod`. Writes into `numeric`
+  columns through ATTACH fail for the same reason (deferred).
+- The ADBC SQLite driver infers `GetTableSchema` types from rows: empty tables
+  read as all-BIGINT (declared types are only in `GetObjects`).
+- `CREATE TABLE` through ATTACH is implemented as ADBC ingestion of an empty
+  stream (mode create/replace); `AdbcCatalog::SupportsCreateTable` rejects
+  constraints/defaults rather than silently dropping them.

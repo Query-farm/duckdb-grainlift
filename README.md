@@ -27,6 +27,8 @@ SELECT * FROM grainlift_scan(getvariable('conn')::BIGINT, 'SELECT * FROM orders 
 ATTACH 'grainlift+https://grainlift.example.com' AS wh (TYPE grainlift, TARGET 'warehouse', BEARER_TOKEN '...');
 SELECT count(*) FROM wh.orders WHERE status = 'open';   -- filters and projections are pushed down
 CREATE TABLE wh.snapshot AS SELECT * FROM local_table;  -- bulk ingestion
+CREATE TABLE wh.events (id BIGINT, name VARCHAR);        -- remote DDL, in the driver's dialect
+DROP TABLE wh.events;
 ```
 
 | Function | Purpose |

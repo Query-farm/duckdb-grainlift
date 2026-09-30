@@ -496,9 +496,19 @@ vgi-rpc-rust worktree; switch it to the pushed git rev before merging.
 - An attached PostgreSQL database has no `main` schema; qualify `public` tables
   (`pg.public.t`).
 
-- `DROP TABLE` / `CREATE TABLE` DDL through ATTACH is unsupported (inherited
-  from adbc_scanner); use `grainlift_execute`. CTAS onto an existing table
-  reports the same "do not support creating tables through DDL" error.
+- ~~DDL through ATTACH~~ (fixed 2026-09-30): `CREATE TABLE` (via ADBC
+  ingestion of an empty stream, so the driver writes dialect-correct DDL),
+  `CREATE [OR REPLACE | IF NOT EXISTS] TABLE [AS]` and `DROP TABLE/VIEW` work;
+  constraints, defaults and generated columns are rejected with a pointer to
+  `grainlift_execute`.
+- PostgreSQL `numeric` columns read as VARCHAR (the ADBC PostgreSQL driver
+  returns `arrow.opaque` over utf8; upstream apache/arrow-adbc#4798 adds
+  `POSTGRESQL:typmod`), and consequently INSERT into a `numeric` column through
+  ATTACH fails ("COPY Writer from Arrow type 'string' to PostgreSQL numeric is
+  not implemented"). Deferred.
+- SQLite: the ADBC SQLite driver infers column types from row data, so an
+  empty table's columns all read as BIGINT (its `GetObjects` has the declared
+  types; `GetTableSchema` does not).
 - Attached catalogs cache remote metadata; after schema changes made elsewhere
   (another attachment, `grainlift_execute`), run `CALL grainlift_clear_cache()`.
 - The browser buffers each HTTP response; there is no cancellation and
