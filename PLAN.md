@@ -472,9 +472,9 @@ vgi-rpc-rust worktree; switch it to the pushed git rev before merging.
   sqlite targets): all pass, with both the threaded and the thread-free
   (`-DGRAINLIFT_NO_INSERT_THREAD=ON`, used by WASM) insert paths.
 - vgi-rpc-rust: all client/server tests, clippy and fmt pass (see its commit).
-- grainlift: driver/protocol tests pass; grainlift-server passes except four
-  `http_proxy::result_reuse` TCP tests, which fail identically on the untouched
-  base commit `4e4ae60`.
+- grainlift: driver/protocol/server tests pass. (Four `result_reuse` TCP tests
+  used to fail on macOS only: accepted sockets inherited the listener's
+  `O_NONBLOCK`; fixed in grainlift#16.)
 - Browser (Playwright, `@haybarn/haybarn-wasm@1.5.5-rc6`, engine `105edd31b5`):
   - COI: INSTALL/LOAD from a local repository; `grainlift_connect`/scan/info/
     execute/disconnect; ATTACH with pushed-down filters and joins; CTAS and
@@ -509,6 +509,13 @@ vgi-rpc-rust worktree; switch it to the pushed git rev before merging.
 - SQLite: the ADBC SQLite driver infers column types from row data, so an
   empty table's columns all read as BIGINT (its `GetObjects` has the declared
   types; `GetTableSchema` does not).
+- ~~Mid-stream failure~~ (fixed 2026-09-30, grainlift#16 + vgi-rpc-rust#7):
+  a result stream interrupted by a transport failure resumes from the next
+  batch sequence (HTTP retries the continuation token; tcp/iroh reopen
+  `read_result`), using the server's replay of the last batch. Only if the
+  server lost the session too (Iroh connection closed, TTL) does the query
+  fail, with "result stream interrupted after N batches … rerun the query".
+  Byte transports previously ended such a stream silently early.
 - Attached catalogs cache remote metadata; after schema changes made elsewhere
   (another attachment, `grainlift_execute`), run `CALL grainlift_clear_cache()`.
 - The browser buffers each HTTP response; there is no cancellation and

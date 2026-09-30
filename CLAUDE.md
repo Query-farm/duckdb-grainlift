@@ -75,6 +75,9 @@ grainlift-demo.query-farm.services).
   columns through ATTACH fail for the same reason (deferred).
 - The ADBC SQLite driver infers `GetTableSchema` types from rows: empty tables
   read as all-BIGINT (declared types are only in `GetObjects`).
+- Transport failures: new work replaces a lost session (autocommit only);
+  an in-flight result stream resumes by batch sequence on the same session
+  (never a new one, which would not have the result).
 - `CREATE TABLE` through ATTACH is implemented as ADBC ingestion of an empty
   stream (mode create/replace); `AdbcCatalog::SupportsCreateTable` rejects
   constraints/defaults rather than silently dropping them.
