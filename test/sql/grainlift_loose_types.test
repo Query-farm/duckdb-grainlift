@@ -1,0 +1,48 @@
+# name: test/sql/grainlift_loose_types.test
+# description: attached tables cast result columns whose type differs from the table's (loosely typed remotes)
+# group: [grainlift]
+
+require grainlift
+
+require httpfs
+
+require-env GRAINLIFT_URI
+
+require-env GRAINLIFT_TOKEN
+
+statement ok
+ATTACH '${GRAINLIFT_URI}' AS db (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_grainlift_loose.db');
+
+statement ok
+CALL grainlift_execute('db', 'DROP TABLE IF EXISTS loose');
+
+# An untyped SQLite column holding both integers and reals
+statement ok
+CALL grainlift_execute('db', 'CREATE TABLE loose (x)');
+
+statement ok
+CALL grainlift_execute('db', 'INSERT INTO loose VALUES (2.5), (1)');
+
+statement ok
+DETACH db;
+
+statement ok
+ATTACH '${GRAINLIFT_URI}' AS db (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_grainlift_loose.db');
+
+# The table reads as DOUBLE; a filter selecting only the integer row returns an
+# int64 result column, which is cast rather than rejected
+query R
+SELECT x FROM db.loose WHERE x < 2;
+----
+1.0
+
+query R
+SELECT sum(x) FROM db.loose;
+----
+3.5
+
+statement ok
+CALL grainlift_execute('db', 'DROP TABLE loose');
+
+statement ok
+DETACH db;

@@ -113,6 +113,10 @@ struct AdbcScanGlobalState : public GlobalTableFunctionState {
     bool has_projected_schema = false;
     vector<LogicalType> expected_types;
     bool schema_validated = false;
+    // grainlift_scan_table casts columns whose result type differs from the
+    // table's declared type (loosely typed remotes such as SQLite report types
+    // per result), so only grainlift_scan needs the types to match exactly.
+    bool casts_result_types = false;
 
     // For grainlift_scan: projection_ids for removing filter-only columns from output.
     // When DuckDB applies filters after the scan (filter_pushdown = false), it may request
@@ -732,7 +736,8 @@ static bool GetNextBatch(AdbcScanGlobalState &global_state, AdbcScanLocalState &
     // declared TEXT columns. Validate types before reading the first nonempty
     // batch; empty results never require interpreting any value buffers.
     if (chunk->arrow_array.length > 0 && !global_state.schema_validated) {
-        ValidateStreamSchema(global_state.projected_arrow_table, global_state.expected_types);
+        ValidateStreamSchema(global_state.projected_arrow_table, global_state.expected_types,
+                             !global_state.casts_result_types);
         global_state.schema_validated = true;
     }
 
@@ -1106,6 +1111,7 @@ static unique_ptr<GlobalTableFunctionState> AdbcScanTableInitGlobal(ClientContex
         global_state->expected_types = std::move(expected);
         ValidateStreamSchema(global_state->projected_arrow_table, global_state->expected_types, false);
         global_state->has_projected_schema = true;
+        global_state->casts_result_types = true;
     }
 
     // Store row count for progress reporting (if driver provided it)

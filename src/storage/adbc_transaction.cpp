@@ -60,16 +60,23 @@ shared_ptr<AdbcConnectionWrapper> AdbcTransaction::GetWriteConnection() {
 		write_lease = adbc_catalog.GetPool().GetConnection(AdbcConnectionRole::WRITE);
 	}
 	auto conn = write_lease.GetConnection();
-	if (!write_started) {
+	if (!write_started && !write_autocommit) {
 		try {
 			conn->SetAutocommit(false);
+			write_started = true;
 		} catch (std::exception &e) {
-			throw NotImplementedException(
-			    "ADBC driver does not support multi-statement transactions (could not disable "
-			    "autocommit): %s",
-			    e.what());
+			// A remote without transactions (e.g. Cloudflare D1) can still run a
+			// single statement: DuckDB's implicit transaction then writes in
+			// autocommit mode, which cannot be rolled back. An explicit
+			// BEGIN ... COMMIT cannot be honoured, so it fails loudly.
+			if (!GetContext().transaction.IsAutoCommit()) {
+				throw NotImplementedException(
+				    "ADBC driver does not support multi-statement transactions (could not disable "
+				    "autocommit): %s",
+				    e.what());
+			}
+			write_autocommit = true;
 		}
-		write_started = true;
 	}
 	return conn;
 }

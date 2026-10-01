@@ -39,7 +39,8 @@ public:
 	//! connection and disables ADBC autocommit so every write in the transaction
 	//! commits or rolls back together (driven by Commit/Rollback below). Throws if
 	//! the catalog is read-only, or NotImplemented if the driver cannot disable
-	//! autocommit (fail loud rather than silently auto-committing).
+	//! autocommit inside an explicit transaction (fail loud rather than silently
+	//! auto-committing); a single-statement transaction then writes in autocommit.
 	shared_ptr<AdbcConnectionWrapper> GetWriteConnection();
 	//! Whether this transaction has started writing (holds a write connection).
 	bool HasWriteConnection() const {
@@ -59,6 +60,9 @@ private:
 	AdbcPoolConnection write_lease;
 	//! Whether autocommit has been disabled on the write connection.
 	bool write_started = false;
+	//! The remote cannot disable autocommit, so this single-statement
+	//! transaction writes in autocommit mode.
+	bool write_autocommit = false;
 };
 
 } // namespace adbc_scanner

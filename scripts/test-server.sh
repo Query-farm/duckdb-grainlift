@@ -105,10 +105,12 @@ grainlift-test-token = "tester"
 TOML
 
 if [[ "$OPEN" != "1" ]]; then
+    TESTER_TARGETS='"sqlite", "sqlite_demo"'
+    [[ "$PG_ENABLED" == "1" ]] && TESTER_TARGETS+=', "postgres"'
     cat >> "$CONFIG" <<TOML
 
 [auth.target_permissions]
-"tester" = ["sqlite", "sqlite_demo", "postgres"]
+"tester" = [${TESTER_TARGETS}]
 TOML
 fi
 

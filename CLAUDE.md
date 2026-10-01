@@ -83,6 +83,13 @@ grainlift-demo.query-farm.services).
 - Transport failures: new work replaces a lost session (autocommit only);
   an in-flight result stream resumes by batch sequence on the same session
   (never a new one, which would not have the result).
+- Loosely typed remotes (SQLite, Cloudflare D1) report result types per query,
+  which can differ from the table's: attached-table scans cast such columns to
+  the table's types; `grainlift_scan` with `columns` requires exact types.
+- Remotes without transactions (D1) cannot disable autocommit: a single DuckDB
+  statement then writes in autocommit mode (no rollback); explicit
+  `BEGIN ... COMMIT` writes fail with "does not support multi-statement
+  transactions".
 - `CREATE TABLE` through ATTACH is implemented as ADBC ingestion of an empty
   stream (mode create/replace); `AdbcCatalog::SupportsCreateTable` rejects
   constraints/defaults rather than silently dropping them.
