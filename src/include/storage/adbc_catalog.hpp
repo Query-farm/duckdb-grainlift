@@ -48,7 +48,7 @@ public:
 public:
 	void Initialize(bool load_builtin) override;
 	string GetCatalogType() override {
-		return "adbc";
+		return "grainlift";
 	}
 	string GetDefaultSchema() const override {
 		return default_schema.empty() ? "main" : default_schema;

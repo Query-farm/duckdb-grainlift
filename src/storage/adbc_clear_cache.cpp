@@ -30,7 +30,7 @@ static void ClearCache(ClientContext &context, TableFunctionInput &input, DataCh
     bool cleared = false;
     for (auto database : DatabaseManager::Get(context).GetDatabases(context)) {
         auto &catalog = database->GetCatalog();
-        if (catalog.GetCatalogType() == "adbc") {
+        if (catalog.GetCatalogType() == "grainlift") {
             catalog.Cast<AdbcCatalog>().ClearCache();
             cleared = true;
         }

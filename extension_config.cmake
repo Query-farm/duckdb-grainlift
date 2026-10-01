@@ -10,7 +10,7 @@ endif()
 duckdb_extension_load(grainlift
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}
     LOAD_TESTS
-    EXTENSION_VERSION v0.1.0
+    EXTENSION_VERSION v0.4.0
     LINKED_LIBS "${GRAINLIFT_WASM_RUST_LIB}"
 )
 

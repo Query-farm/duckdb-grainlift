@@ -22,6 +22,12 @@ CALL grainlift_execute(getvariable('setup')::BIGINT, 'DROP TABLE IF EXISTS t2');
 statement ok
 ATTACH '${GRAINLIFT_URI}' AS lite (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_storage_ddl.db');
 
+# Attached databases report the grainlift type (UIs like Cupola show it)
+query T
+SELECT type FROM duckdb_databases() WHERE database_name = 'lite';
+----
+grainlift
+
 # ---- CREATE TABLE (through ADBC ingestion of an empty stream) ----
 
 statement ok

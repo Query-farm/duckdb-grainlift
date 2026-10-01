@@ -10,7 +10,7 @@
 #include "duckdb/main/config.hpp"
 
 #ifndef GRAINLIFT_EXTENSION_VERSION
-#define GRAINLIFT_EXTENSION_VERSION "0.1.0"
+#define GRAINLIFT_EXTENSION_VERSION "0.4.0"
 #endif
 
 namespace adbc_scanner {
