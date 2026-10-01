@@ -50,6 +50,8 @@ ATTACH options (also usable in `CREATE SECRET (TYPE grainlift, ...)`):
 | `uri` | grainlift service: `grainlift+https://`, `grainlift+http://`, `grainlift://` (HTTPS) or `grainlift+iroh://<64-hex-endpoint-id>` |
 | `target` | Server-side target name |
 | `bearer_token` (`token`) | HTTP bearer token |
+| `oauth_refresh_token` | HTTP OAuth refresh token; the driver exchanges it for bearer tokens before they expire and after a 401. The token endpoint and client ID are discovered from a gateway configured with `[auth.oauth]` |
+| `oauth_token_endpoint`, `oauth_client_id`, `oauth_client_secret` | Override OAuth discovery |
 | `request_timeout_ms`, `max_response_bytes`, `max_bind_bytes` | Driver limits |
 | `remote_uri` | The downstream driver's `uri`, when the target allows it |
 | `dialect` | Override SQL dialect detection for pushdown (default: remote vendor name) |
