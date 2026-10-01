@@ -63,6 +63,12 @@ statement error
 ATTACH '${GRAINLIFT_URI}' AS db (TYPE grainlift, target 'sqlite', bearer_token 'wrong-token');
 ----
 
+# OAuth needs a gateway that advertises it (the test gateway uses static tokens)
+statement error
+ATTACH '${GRAINLIFT_URI}' AS db (TYPE grainlift, target 'sqlite', oauth_refresh_token 'r');
+----
+does not advertise OAuth
+
 statement ok
 ATTACH '${GRAINLIFT_URI}' AS db (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri ':memory:');
 

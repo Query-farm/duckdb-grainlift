@@ -49,6 +49,12 @@ static const case_insensitive_map_t<string> &GrainliftOptionAliases() {
 	    {"target", "grainlift.target"},
 	    {"bearer_token", "grainlift.auth.bearer_token"},
 	    {"token", "grainlift.auth.bearer_token"},
+	    // OAuth: the driver exchanges the refresh token for bearer tokens as they
+	    // expire; endpoint and client ID are discovered from the gateway.
+	    {"oauth_refresh_token", "grainlift.auth.oauth_refresh_token"},
+	    {"oauth_token_endpoint", "grainlift.auth.oauth_token_endpoint"},
+	    {"oauth_client_id", "grainlift.auth.oauth_client_id"},
+	    {"oauth_client_secret", "grainlift.auth.oauth_client_secret"},
 	    {"request_timeout_ms", "grainlift.request_timeout_ms"},
 	    {"max_response_bytes", "grainlift.max_response_bytes"},
 	    {"max_bind_bytes", "grainlift.max_bind_bytes"},

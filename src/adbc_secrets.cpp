@@ -145,8 +145,9 @@ static unique_ptr<BaseSecret> CreateAdbcSecretFunction(ClientContext &context, C
 		auto lower_name = StringUtil::Lower(named_param.first);
 
 		if (lower_name == "uri" || lower_name == "target" || lower_name == "bearer_token" ||
-		    lower_name == "remote_uri" || lower_name == "username" || lower_name == "password" ||
-		    lower_name == "database") {
+		    lower_name == "oauth_refresh_token" || lower_name == "oauth_token_endpoint" ||
+		    lower_name == "oauth_client_id" || lower_name == "oauth_client_secret" || lower_name == "remote_uri" ||
+		    lower_name == "username" || lower_name == "password" || lower_name == "database") {
 			result->secret_map[lower_name] = named_param.second.ToString();
 		} else if (lower_name == "extra_options") {
 			// extra_options is a MAP of string -> string for driver-specific options
@@ -167,7 +168,8 @@ static unique_ptr<BaseSecret> CreateAdbcSecretFunction(ClientContext &context, C
 	}
 
 	// Redact sensitive keys by default
-	for (auto key : {"password", "bearer_token", "auth_token", "token", "secret", "api_key", "apikey", "credential"}) {
+	for (auto key : {"password", "bearer_token", "oauth_refresh_token", "oauth_client_secret", "auth_token", "token",
+	                 "secret", "api_key", "apikey", "credential"}) {
 		result->redact_keys.insert(key);
 	}
 
@@ -188,7 +190,8 @@ void RegisterAdbcSecrets(ExtensionLoader &loader) {
 
 	// Grainlift connection parameters; username/password/database/remote_uri
 	// are forwarded to the downstream driver by the grainlift server.
-	for (auto name : {"uri", "target", "bearer_token", "remote_uri", "username", "password", "database"}) {
+	for (auto name : {"uri", "target", "bearer_token", "oauth_refresh_token", "oauth_token_endpoint", "oauth_client_id",
+	                  "oauth_client_secret", "remote_uri", "username", "password", "database"}) {
 		adbc_secret_function.named_parameters[name] = LogicalType::VARCHAR;
 	}
 
