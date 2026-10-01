@@ -37,9 +37,14 @@ Consequences for decisions in this repo:
   `src/include/grainlift_host.h`) implemented with DuckDB `HTTPUtil`: sync XHR
   in DuckDB-WASM, httpfs natively (autoloaded).
 - `iroh://` in the browser: the driver talks through Haybarn's SAB rings to the
-  page-owned Iroh adapter Worker; `grainlift_connect`'s bind calls
-  `grainlift_prepare_endpoint` because the Worker can only be requested from
-  DuckDB's main worker thread.
+  page-owned Iroh adapter Worker. A pre-optimizer hook prepares the ATTACH
+  path (`grainlift_prepare_endpoint`) during planning, because the Worker can
+  only be requested from DuckDB's main worker thread and the attach callback
+  may run on a pthread.
+- No connection handles: the `grainlift_*` functions take an ATTACH alias and
+  use the attachment's connection (the transaction's write connection inside
+  an explicit transaction). Remote tables advertise no virtual columns (no
+  rowid), so `count(*)` reads a real column.
 - Inserts: no threads on WASM (`GRAINLIFT_INSERT_THREAD`), and the driver pulls
   the whole bind stream inside `BindStream`, so binding never runs on the
   producer thread.

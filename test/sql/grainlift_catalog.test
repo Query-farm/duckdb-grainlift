@@ -14,39 +14,39 @@ require-env GRAINLIFT_TOKEN
 # NULL Connection Handle Tests
 # ============================================
 
-# Test grainlift_info with NULL connection handle
+# Test grainlift_info with a NULL database name
 statement error
 SELECT * FROM grainlift_info(NULL);
 ----
-Invalid Input Error: grainlift_info: Connection handle cannot be NULL
+grainlift_info: database name cannot be NULL
 
-# Test grainlift_tables with NULL connection handle
+# Test grainlift_tables with a NULL database name
 statement error
 SELECT * FROM grainlift_tables(NULL);
 ----
-Invalid Input Error: grainlift_tables: Connection handle cannot be NULL
+grainlift_tables: database name cannot be NULL
 
-# Test grainlift_table_types with NULL connection handle
+# Test grainlift_table_types with a NULL database name
 statement error
 SELECT * FROM grainlift_table_types(NULL);
 ----
-Invalid Input Error: grainlift_table_types: Connection handle cannot be NULL
+grainlift_table_types: database name cannot be NULL
 
-# Test grainlift_columns with NULL connection handle
+# Test grainlift_columns with a NULL database name
 statement error
 SELECT * FROM grainlift_columns(NULL);
 ----
-Invalid Input Error: grainlift_columns: Connection handle cannot be NULL
+grainlift_columns: database name cannot be NULL
 
-# Test grainlift_schema with NULL connection handle
+# Test grainlift_schema with a NULL database name
 statement error
 SELECT * FROM grainlift_schema(NULL, 'test');
 ----
-Invalid Input Error: grainlift_schema: Connection handle cannot be NULL
+grainlift_schema: database name cannot be NULL
 
 # Test grainlift_schema with NULL table name
 statement error
-SELECT * FROM grainlift_schema(12345, NULL);
+SELECT * FROM grainlift_schema('nope', NULL);
 ----
 Invalid Input Error: grainlift_schema: Table name cannot be NULL
 
@@ -55,7 +55,7 @@ Invalid Input Error: grainlift_schema: Table name cannot be NULL
 # ============================================
 
 statement ok
-SET VARIABLE conn_id = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': ':memory:'}));
+ATTACH '${GRAINLIFT_URI}' AS conn_id (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri ':memory:');
 
 # ============================================
 # grainlift_info Tests
@@ -63,21 +63,21 @@ SET VARIABLE conn_id = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'ta
 
 # Test grainlift_info - returns driver/database info
 query II
-SELECT * FROM grainlift_info(getvariable('conn_id')::BIGINT) WHERE info_name = 'vendor_name';
+SELECT * FROM grainlift_info('conn_id') WHERE info_name = 'vendor_name';
 ----
 vendor_name	SQLite
 
 # Test grainlift_info - all required info fields should be present
 query I
-SELECT COUNT(*) >= 3 FROM grainlift_info(getvariable('conn_id')::BIGINT);
+SELECT COUNT(*) >= 3 FROM grainlift_info('conn_id');
 ----
 true
 
-# Test grainlift_info with invalid connection handle
+# Test grainlift_info with an unknown database name
 statement error
-SELECT * FROM grainlift_info(12345);
+SELECT * FROM grainlift_info('nope');
 ----
-Invalid Input Error: grainlift_info: Invalid connection handle: 12345
+Binder Error: grainlift_info: no attached database named "nope"
 
 # ============================================
 # grainlift_tables Tests
@@ -85,21 +85,21 @@ Invalid Input Error: grainlift_info: Invalid connection handle: 12345
 
 # Test grainlift_tables with empty database (no tables created yet)
 statement ok
-SET VARIABLE fresh_conn = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': ':memory:'}));
+ATTACH '${GRAINLIFT_URI}' AS fresh_conn (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri ':memory:');
 
 query I
-SELECT COUNT(*) FROM grainlift_tables(getvariable('fresh_conn')::BIGINT);
+SELECT COUNT(*) FROM grainlift_tables('fresh_conn');
 ----
 0
 
 statement ok
-CALL grainlift_disconnect(getvariable('fresh_conn')::BIGINT);
+DETACH fresh_conn;
 
-# Test grainlift_tables with invalid connection handle
+# Test grainlift_tables with an unknown database name
 statement error
-SELECT * FROM grainlift_tables(12345);
+SELECT * FROM grainlift_tables('nope');
 ----
-Invalid Input Error: grainlift_tables: Invalid connection handle: 12345
+Binder Error: grainlift_tables: no attached database named "nope"
 
 # ============================================
 # grainlift_table_types Tests
@@ -107,16 +107,16 @@ Invalid Input Error: grainlift_tables: Invalid connection handle: 12345
 
 # Test grainlift_table_types - returns supported table types
 query I
-SELECT * FROM grainlift_table_types(getvariable('conn_id')::BIGINT) ORDER BY table_type;
+SELECT * FROM grainlift_table_types('conn_id') ORDER BY table_type;
 ----
 table
 view
 
-# Test grainlift_table_types with invalid connection handle
+# Test grainlift_table_types with an unknown database name
 statement error
-SELECT * FROM grainlift_table_types(12345);
+SELECT * FROM grainlift_table_types('nope');
 ----
-Invalid Input Error: grainlift_table_types: Invalid connection handle: 12345
+Binder Error: grainlift_table_types: no attached database named "nope"
 
 # ============================================
 # grainlift_columns Tests
@@ -124,11 +124,11 @@ Invalid Input Error: grainlift_table_types: Invalid connection handle: 12345
 
 # Create a table for column tests
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'CREATE TABLE test_cols (id INTEGER PRIMARY KEY, name TEXT NOT NULL, value REAL)');
+CALL grainlift_execute('conn_id', 'CREATE TABLE test_cols (id INTEGER PRIMARY KEY, name TEXT NOT NULL, value REAL)');
 
 # Test grainlift_columns - basic query
 query IIII
-SELECT table_name, column_name, ordinal_position, type_name FROM grainlift_columns(getvariable('conn_id')::BIGINT, table_name := 'test_cols') ORDER BY ordinal_position;
+SELECT table_name, column_name, ordinal_position, type_name FROM grainlift_columns('conn_id', table_name := 'test_cols') ORDER BY ordinal_position;
 ----
 test_cols	id	1	INTEGER
 test_cols	name	2	TEXT
@@ -136,15 +136,15 @@ test_cols	value	3	REAL
 
 # Test grainlift_columns - filter by column_name
 query II
-SELECT table_name, column_name FROM grainlift_columns(getvariable('conn_id')::BIGINT, table_name := 'test_cols', column_name := 'name');
+SELECT table_name, column_name FROM grainlift_columns('conn_id', table_name := 'test_cols', column_name := 'name');
 ----
 test_cols	name
 
-# Test grainlift_columns with invalid connection handle
+# Test grainlift_columns with an unknown database name
 statement error
-SELECT * FROM grainlift_columns(12345);
+SELECT * FROM grainlift_columns('nope');
 ----
-Invalid Input Error: grainlift_columns: Invalid connection handle: 12345
+Binder Error: grainlift_columns: no attached database named "nope"
 
 # ============================================
 # grainlift_schema Tests
@@ -152,22 +152,22 @@ Invalid Input Error: grainlift_columns: Invalid connection handle: 12345
 
 # Create a table for schema tests
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'CREATE TABLE schema_test (id INTEGER, name TEXT, value REAL)');
+CALL grainlift_execute('conn_id', 'CREATE TABLE schema_test (id INTEGER, name TEXT, value REAL)');
 
 # Test grainlift_schema - get Arrow schema for a table
 query I
-SELECT field_name FROM grainlift_schema(getvariable('conn_id')::BIGINT, 'schema_test') ORDER BY field_name;
+SELECT field_name FROM grainlift_schema('conn_id', 'schema_test') ORDER BY field_name;
 ----
 id
 name
 value
 
-# Test grainlift_schema with invalid connection handle
+# Test grainlift_schema with an unknown database name
 statement error
-SELECT * FROM grainlift_schema(12345, 'test');
+SELECT * FROM grainlift_schema('nope', 'test');
 ----
-Invalid Input Error: grainlift_schema: Invalid connection handle: 12345
+Binder Error: grainlift_schema: no attached database named "nope"
 
 # Clean up
 statement ok
-CALL grainlift_disconnect(getvariable('conn_id')::BIGINT);
+DETACH conn_id;

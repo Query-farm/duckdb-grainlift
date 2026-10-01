@@ -21,10 +21,9 @@ namespace adbc_scanner {
 
 // In DuckDB-WASM an iroh:// endpoint must be prepared from DuckDB's main worker
 // thread (the page's Iroh adapter Worker is only reachable from there).
-// grainlift_connect prepares while binding; ATTACH's attach callback runs at
-// execution, which with threads > 1 can be a pthread, so prepare from the
-// ATTACH plan instead: pre-optimizer hooks run during planning on the calling
-// thread. Preparing is a no-op for anything that is not an iroh:// endpoint
+// ATTACH's attach callback runs at execution, which can be a pthread (e.g. in
+// Cupola's shell), so prepare from the ATTACH plan instead: pre-optimizer hooks
+// run during planning on the calling thread. Preparing is a no-op for anything that is not an iroh:// endpoint
 // (and natively).
 static void PrepareAttachEndpoint(OptimizerExtensionInput &, unique_ptr<LogicalOperator> &plan) {
 	if (!plan || plan->type != LogicalOperatorType::LOGICAL_ATTACH) {
@@ -47,9 +46,6 @@ static void LoadInternal(duckdb::ExtensionLoader &loader) {
 
 	// Register grainlift secret type and create secret function
 	RegisterAdbcSecrets(loader);
-
-	// Register volatile grainlift_connect and runtime connection commands
-	RegisterAdbcScalarFunctions(loader.GetDatabaseInstance());
 
 	// Register table functions (grainlift_scan, grainlift_scan_table)
 	RegisterAdbcTableFunctions(loader.GetDatabaseInstance());

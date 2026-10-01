@@ -1,12 +1,12 @@
 # name: test/sql/grainlift_connect.test
-# description: test grainlift connection functions
+# description: connecting with ATTACH and naming the attached database in grainlift_* functions
 # group: [grainlift]
 
 # Before we load the extension, this will fail
 statement error
-SELECT grainlift_connect({'uri': 'grainlift+http://127.0.0.1:1', 'target': 't'});
+SELECT * FROM grainlift_info('db');
 ----
-Catalog Error: Scalar Function with name grainlift_connect does not exist!
+Catalog Error: Table Function with name grainlift_info does not exist!
 
 # Require statement will ensure this test is run with this extension loaded
 require grainlift
@@ -14,31 +14,39 @@ require grainlift
 require httpfs
 
 statement error
-SELECT grainlift_connect({'target': 'sqlite'});
+ATTACH '' AS db (TYPE grainlift, target 'sqlite');
 ----
 Invalid Input Error: grainlift: a 'uri' option naming the grainlift service is required
 
 statement error
-SELECT grainlift_connect(MAP {'uri': 'grainlift+http://127.0.0.1:1'});
+ATTACH 'grainlift+http://127.0.0.1:1' AS db (TYPE grainlift);
 ----
 Invalid Input Error: grainlift: a 'target' option naming the server-side target is required
 
 # Dynamic driver loading does not exist in this extension
 statement error
-SELECT grainlift_connect({'uri': 'grainlift+http://127.0.0.1:1', 'target': 't', 'driver': 'sqlite'});
+ATTACH 'grainlift+http://127.0.0.1:1' AS db (TYPE grainlift, target 't', driver 'sqlite');
 ----
 option 'driver' is not supported; the grainlift driver is built in
 
+# The functions name an attached grainlift database
 statement error
-SELECT grainlift_connect({'uri': 'grainlift+http://127.0.0.1:1', 'target': 't', 'grainlift.internal.host_ctx': '1'});
+SELECT * FROM grainlift_info('nope');
 ----
-is reserved
+Binder Error: grainlift_info: no attached database named "nope"
 
-# Test disconnect with invalid handle
+statement ok
+ATTACH ':memory:' AS plain_duckdb;
+
 statement error
-CALL grainlift_disconnect(12345);
+SELECT * FROM grainlift_scan('plain_duckdb', 'SELECT 1');
 ----
-Invalid Input Error: grainlift_disconnect: Invalid connection handle: 12345
+Binder Error: grainlift_scan: "plain_duckdb" is a duckdb database, not a grainlift one
+
+statement error
+SELECT * FROM grainlift_scan(NULL, 'SELECT 1');
+----
+database name cannot be NULL
 
 require-env GRAINLIFT_URI
 
@@ -46,42 +54,46 @@ require-env GRAINLIFT_TOKEN
 
 # An unreachable service surfaces as an IO error from the host HTTP layer
 statement error
-SELECT grainlift_connect({'uri': 'grainlift+http://127.0.0.1:9', 'target': 'sqlite', 'bearer_token': 'x'});
+ATTACH 'grainlift+http://127.0.0.1:9' AS db (TYPE grainlift, target 'sqlite', bearer_token 'x');
 ----
 grainlift: HTTP
 
 # Wrong credentials
 statement error
-SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': 'wrong-token'});
+ATTACH '${GRAINLIFT_URI}' AS db (TYPE grainlift, target 'sqlite', bearer_token 'wrong-token');
 ----
 
-# Test basic connection with STRUCT syntax
 statement ok
-SET VARIABLE conn_id = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': ':memory:'}));
-
-# Test basic connection with MAP syntax
-statement ok
-SET VARIABLE map_conn = (SELECT grainlift_connect(MAP {'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': ':memory:'}));
+ATTACH '${GRAINLIFT_URI}' AS db (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri ':memory:');
 
 # The remote driver is reported through grainlift_info
 query I
-SELECT count(*) > 0 FROM grainlift_info(getvariable('conn_id')::BIGINT) WHERE info_value ILIKE '%sqlite%';
+SELECT count(*) > 0 FROM grainlift_info('db') WHERE info_value ILIKE '%sqlite%';
 ----
 true
 
-# Test disconnect
+# The alias is what names it, case-insensitively like any catalog
 query I
-CALL grainlift_disconnect(getvariable('conn_id')::BIGINT);
+SELECT * FROM grainlift_scan('DB', 'SELECT 42 AS answer', columns := {'answer': 'BIGINT'});
 ----
-true
+42
+
+statement ok
+ATTACH '${GRAINLIFT_URI}' AS other_alias (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri ':memory:');
 
 query I
-CALL grainlift_disconnect(getvariable('map_conn')::BIGINT);
+SELECT * FROM grainlift_scan('other_alias', 'SELECT 7 AS n', columns := {'n': 'BIGINT'});
 ----
-true
+7
 
-# Test that connection is invalid after disconnect
+statement ok
+DETACH db;
+
+statement ok
+DETACH other_alias;
+
+# After DETACH the name no longer resolves
 statement error
-SELECT * FROM grainlift_scan(getvariable('conn_id')::BIGINT, 'SELECT 1');
+SELECT * FROM grainlift_scan('db', 'SELECT 1');
 ----
-Invalid Input Error: grainlift_scan: Invalid connection handle
+Binder Error: grainlift_scan: no attached database named "db"

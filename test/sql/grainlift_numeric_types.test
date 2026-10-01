@@ -25,16 +25,16 @@ require-env GRAINLIFT_TOKEN
 # ============================================
 
 statement ok
-SET VARIABLE conn_id = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_numeric_types.db'}));
+ATTACH '${GRAINLIFT_URI}' AS conn_id (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_numeric_types.db');
 
 # Create a table with integer and real columns matching the TPC-H lineitem schema
 # from the bug report (L_ORDERKEY, L_PARTKEY, L_SUPPKEY, L_LINENUMBER are integer;
 # L_QUANTITY, L_EXTENDEDPRICE, L_DISCOUNT, L_TAX are decimal/real)
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'DROP TABLE IF EXISTS lineitem');
+CALL grainlift_execute('conn_id', 'DROP TABLE IF EXISTS lineitem');
 
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, '
+CALL grainlift_execute('conn_id', '
     CREATE TABLE lineitem (
         l_orderkey INTEGER,
         l_partkey INTEGER,
@@ -51,7 +51,7 @@ CALL grainlift_execute(getvariable('conn_id')::BIGINT, '
 
 # Insert the exact values from the bug report (Python/correct output)
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, '
+CALL grainlift_execute('conn_id', '
     INSERT INTO lineitem VALUES
         (2400001, 132304, 4818, 1, 10.0, 13363.0, 0.03, 0.02, ''SHIP'', ''egular dolphins''),
         (2400001, 24513,  2020, 2, 14.0, 20125.14, 0.04, 0.03, ''SHIP'', ''es wake quickly bold packages''),
@@ -69,7 +69,7 @@ CALL grainlift_execute(getvariable('conn_id')::BIGINT, '
 # Before the fix, integer columns showed alternating correct/zero values and
 # real columns showed denormalized doubles (e.g., 4.94e-321 instead of 10.0).
 query IIIIRRRRTT
-SELECT * FROM grainlift_scan_table(getvariable('conn_id')::BIGINT, 'lineitem') ORDER BY l_linenumber;
+SELECT * FROM grainlift_scan_table('conn_id', 'lineitem') ORDER BY l_linenumber;
 ----
 2400001	132304	4818	1	10.0	13363.0	0.03	0.02	SHIP	egular dolphins
 2400001	24513	2020	2	14.0	20125.14	0.04	0.03	SHIP	es wake quickly bold packages
@@ -86,7 +86,7 @@ SELECT * FROM grainlift_scan_table(getvariable('conn_id')::BIGINT, 'lineitem') O
 # due to Decimal128 bytes being split across int64-sized reads.
 query IIIIRRRR
 SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax
-FROM grainlift_scan_table(getvariable('conn_id')::BIGINT, 'lineitem')
+FROM grainlift_scan_table('conn_id', 'lineitem')
 WHERE l_orderkey = 2400001
 ORDER BY l_linenumber;
 ----
@@ -104,7 +104,7 @@ ORDER BY l_linenumber;
 # Select only real-valued columns - these showed as denormalized doubles before the fix
 query RR
 SELECT l_quantity, l_discount
-FROM grainlift_scan_table(getvariable('conn_id')::BIGINT, 'lineitem')
+FROM grainlift_scan_table('conn_id', 'lineitem')
 ORDER BY l_linenumber;
 ----
 10.0	0.03
@@ -116,7 +116,7 @@ ORDER BY l_linenumber;
 # Select a mix of integer and real columns
 query IR
 SELECT l_linenumber, l_extendedprice
-FROM grainlift_scan_table(getvariable('conn_id')::BIGINT, 'lineitem')
+FROM grainlift_scan_table('conn_id', 'lineitem')
 ORDER BY l_linenumber;
 ----
 1	13363.0
@@ -131,17 +131,17 @@ ORDER BY l_linenumber;
 # ============================================
 
 query RR
-SELECT SUM(l_quantity), SUM(l_extendedprice) FROM grainlift_scan_table(getvariable('conn_id')::BIGINT, 'lineitem');
+SELECT SUM(l_quantity), SUM(l_extendedprice) FROM grainlift_scan_table('conn_id', 'lineitem');
 ----
 57.0	80153.47
 
 query R
-SELECT AVG(l_discount) FROM grainlift_scan_table(getvariable('conn_id')::BIGINT, 'lineitem');
+SELECT AVG(l_discount) FROM grainlift_scan_table('conn_id', 'lineitem');
 ----
 0.048
 
 statement ok
-CALL grainlift_disconnect(getvariable('conn_id')::BIGINT);
+DETACH conn_id;
 
 # ============================================
 # Test via ATTACH (exercises the full storage scan path)
@@ -184,10 +184,10 @@ DETACH numeric_db;
 # ============================================
 
 statement ok
-SET VARIABLE cleanup_conn = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_numeric_types.db'}));
+ATTACH '${GRAINLIFT_URI}' AS cleanup_conn (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_numeric_types.db');
 
 statement ok
-CALL grainlift_execute(getvariable('cleanup_conn')::BIGINT, 'DROP TABLE IF EXISTS lineitem');
+CALL grainlift_execute('cleanup_conn', 'DROP TABLE IF EXISTS lineitem');
 
 statement ok
-CALL grainlift_disconnect(getvariable('cleanup_conn')::BIGINT);
+DETACH cleanup_conn;

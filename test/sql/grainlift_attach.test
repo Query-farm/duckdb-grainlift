@@ -15,19 +15,19 @@ require-env GRAINLIFT_TOKEN
 # ============================================
 
 statement ok
-SET VARIABLE conn_id = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_attach.db'}));
+ATTACH '${GRAINLIFT_URI}' AS conn_id (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_attach.db');
 
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'DROP TABLE IF EXISTS test_table');
+CALL grainlift_execute('conn_id', 'DROP TABLE IF EXISTS test_table');
 
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'CREATE TABLE test_table (id INTEGER, name TEXT, value REAL)');
+CALL grainlift_execute('conn_id', 'CREATE TABLE test_table (id INTEGER, name TEXT, value REAL)');
 
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'INSERT INTO test_table VALUES (1, ''hello'', 1.5), (2, ''world'', 2.5), (3, ''test'', 3.5)');
+CALL grainlift_execute('conn_id', 'INSERT INTO test_table VALUES (1, ''hello'', 1.5), (2, ''world'', 2.5), (3, ''test'', 3.5)');
 
 statement ok
-CALL grainlift_disconnect(getvariable('conn_id')::BIGINT);
+DETACH conn_id;
 
 # ============================================
 # Basic ATTACH Tests
@@ -165,10 +165,10 @@ DETACH sqlite_schema_test;
 
 # Clean up the test file (using a new connection)
 statement ok
-SET VARIABLE cleanup_conn = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_attach.db'}));
+ATTACH '${GRAINLIFT_URI}' AS cleanup_conn (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_attach.db');
 
 statement ok
-CALL grainlift_execute(getvariable('cleanup_conn')::BIGINT, 'DROP TABLE IF EXISTS test_table');
+CALL grainlift_execute('cleanup_conn', 'DROP TABLE IF EXISTS test_table');
 
 statement ok
-CALL grainlift_disconnect(getvariable('cleanup_conn')::BIGINT);
+DETACH cleanup_conn;

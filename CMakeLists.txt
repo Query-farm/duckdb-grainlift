@@ -28,7 +28,6 @@ set(EXTENSION_SOURCES
     src/grainlift_host_http.cpp
     src/adbc_static_driver.cpp
     src/adbc_connection.cpp
-    src/adbc_functions.cpp
     src/adbc_scan.cpp
     src/adbc_arrow_types.cpp
     src/adbc_execute.cpp

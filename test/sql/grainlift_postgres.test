@@ -17,10 +17,10 @@ require-env GRAINLIFT_PG
 # ============================================
 
 statement ok
-SET VARIABLE pg = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'postgres', 'bearer_token': '${GRAINLIFT_TOKEN}'}));
+ATTACH '${GRAINLIFT_URI}' AS pg (TYPE grainlift, target 'postgres', bearer_token '${GRAINLIFT_TOKEN}');
 
 query I
-SELECT info_value FROM grainlift_info(getvariable('pg')::BIGINT) WHERE info_name = 'vendor_name';
+SELECT info_value FROM grainlift_info('pg') WHERE info_name = 'vendor_name';
 ----
 PostgreSQL
 
@@ -29,7 +29,7 @@ PostgreSQL
 # ============================================
 
 query IIIIII
-SELECT * FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.customers ORDER BY id');
+SELECT * FROM grainlift_scan('pg', 'SELECT * FROM sales.customers ORDER BY id');
 ----
 1	Ada Lovelace	ada@example.com	United Kingdom	2024-01-15	true
 2	Grace Hopper	grace@example.com	United States	2024-02-20	true
@@ -39,7 +39,7 @@ SELECT * FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.cus
 6	Hedy Lamarr	hedy@example.com	Austria	2024-06-18	true
 
 query TT
-SELECT column_name, column_type FROM (DESCRIBE SELECT * FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.orders'));
+SELECT column_name, column_type FROM (DESCRIBE SELECT * FROM grainlift_scan('pg', 'SELECT * FROM sales.orders'));
 ----
 id	BIGINT
 customer_id	INTEGER
@@ -51,7 +51,7 @@ weight_kg	DOUBLE
 # PostgreSQL placeholders are $n
 query IIIII
 SELECT id, amount, ordered_at, status, weight_kg
-FROM grainlift_scan(getvariable('pg')::BIGINT,
+FROM grainlift_scan('pg',
     'SELECT id, amount, ordered_at, status, weight_kg FROM sales.orders WHERE customer_id = $1 AND status = $2 ORDER BY id LIMIT 3',
     params := row(2, 'paid'));
 ----
@@ -62,12 +62,12 @@ FROM grainlift_scan(getvariable('pg')::BIGINT,
 # Multi-batch result (50k rows)
 query III
 SELECT count(*), count(weight_kg), round(avg(weight_kg), 4)
-FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.orders');
+FROM grainlift_scan('pg', 'SELECT * FROM sales.orders');
 ----
 50000	45000	25.0
 
 statement error
-SELECT * FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.no_such_table');
+SELECT * FROM grainlift_scan('pg', 'SELECT * FROM sales.no_such_table');
 ----
 does not exist
 
@@ -85,6 +85,25 @@ public	measurements
 sales	customers
 sales	orders
 sales	revenue_by_country
+
+# Queries needing no column (count(*)) on a view whose first column is text:
+# remote tables advertise no rowid, so DuckDB reads a real column instead of
+# a fake rowid filled from 'country' ("Could not convert string … to INT64")
+query I
+SELECT (SELECT count(1) FROM pgdb.sales.revenue_by_country)
+     = (SELECT count(*) FROM grainlift_scan('pg', 'SELECT country FROM sales.revenue_by_country', columns := {'country': 'VARCHAR'}));
+----
+true
+
+query I
+SELECT count(*) > 0 FROM pgdb.sales.revenue_by_country WHERE orders > 0;
+----
+true
+
+statement error
+SELECT rowid FROM pgdb.sales.customers;
+----
+rowid
 
 # Filters and projections are pushed down with PostgreSQL placeholders
 query IIII
@@ -139,7 +158,7 @@ SELECT min(taken_at), max(taken_at), round(sum(reading), 2) FROM pgdb.public.mea
 # ============================================
 
 statement ok
-CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE IF EXISTS sales.returns');
+CALL grainlift_execute('pg', 'DROP TABLE IF EXISTS sales.returns');
 
 statement ok
 CREATE TABLE pgdb.sales.returns AS SELECT range::BIGINT AS order_id, 'damaged' AS reason FROM range(1, 301);
@@ -155,12 +174,12 @@ late	20
 
 # The rows are in PostgreSQL's `sales` schema, not `public`
 query I
-SELECT count(*) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM sales.returns');
+SELECT count(*) FROM grainlift_scan('pg', 'SELECT * FROM sales.returns');
 ----
 320
 
 statement error
-SELECT count(*) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM public.returns');
+SELECT count(*) FROM grainlift_scan('pg', 'SELECT * FROM public.returns');
 ----
 does not exist
 
@@ -194,28 +213,26 @@ SELECT count(*) FROM pgdb.sales.returns WHERE reason = 'committed';
 
 # grainlift_insert into a PostgreSQL table
 statement ok
-CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE IF EXISTS public.bulk');
+CALL grainlift_execute('pg', 'DROP TABLE IF EXISTS public.bulk');
 
 query I
-SELECT * FROM grainlift_insert(getvariable('pg')::BIGINT, 'bulk', (SELECT range AS id, range * 2 AS doubled FROM range(10000)), mode := 'create');
+SELECT * FROM grainlift_insert('pg', 'bulk', (SELECT range AS id, range * 2 AS doubled FROM range(10000)), mode := 'create');
 ----
 10000
 
 query II
-SELECT count(*), sum(doubled) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM public.bulk');
+SELECT count(*), sum(doubled) FROM grainlift_scan('pg', 'SELECT * FROM public.bulk');
 ----
 10000	99990000
 
 statement ok
-CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE sales.returns');
+CALL grainlift_execute('pg', 'DROP TABLE sales.returns');
 
 statement ok
-CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE public.bulk');
+CALL grainlift_execute('pg', 'DROP TABLE public.bulk');
 
 statement ok
 DETACH pgdb;
 
-query I
-CALL grainlift_disconnect(getvariable('pg')::BIGINT);
-----
-true
+statement ok
+DETACH pg;

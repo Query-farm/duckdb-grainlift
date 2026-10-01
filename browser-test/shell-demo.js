@@ -89,7 +89,6 @@ if (!configured) {
     for (const id of ['st-pg', 'st-demo']) setStatus(id, 'error', 'no service configured');
 }
 const auth = transport === 'iroh' ? '' : `, BEARER_TOKEN '${token}'`;
-const connectAuth = transport === 'iroh' ? '' : `, 'bearer_token': '${token}'`;
 
 // ---------------------------------------------------------------------------
 // Engine: always the cross-origin-isolated (wasm_threads) bundle.
@@ -171,7 +170,6 @@ const setup = [
 if (configured) setup.push(
     `ATTACH '${serverUri}' AS pg (TYPE grainlift, TARGET 'postgres'${auth});`,
     `ATTACH '${serverUri}' AS demo (TYPE grainlift, TARGET 'sqlite_demo'${auth});`,
-    `SET VARIABLE pgc = (SELECT grainlift_connect({'uri': '${serverUri}', 'target': 'postgres'${connectAuth}}));`,
     `SELECT database, schema, name, column_names FROM (SHOW ALL TABLES) WHERE database IN ('pg', 'demo');`,
 );
 // Mirrors extraswaps() in the shell: ' ' <-> '-', ';' <-> '~'.
@@ -219,12 +217,12 @@ const tour = [
     {
         title: 'Native SQL passthrough',
         text: 'grainlift_scan sends a query as-is, with $n parameters.',
-        sql: `SELECT * FROM grainlift_scan(getvariable('pgc'), 'SELECT sensor, round(avg(reading)::numeric, 2)::float8 AS avg_reading, count(*) FILTER (WHERE NOT ok) AS faults FROM measurements WHERE taken_at < $1 GROUP BY sensor ORDER BY sensor', params := row(TIMESTAMP '2025-06-01 12:00:00'));`,
+        sql: `SELECT * FROM grainlift_scan('pg', 'SELECT sensor, round(avg(reading)::numeric, 2)::float8 AS avg_reading, count(*) FILTER (WHERE NOT ok) AS faults FROM measurements WHERE taken_at < $1 GROUP BY sensor ORDER BY sensor', params := row(TIMESTAMP '2025-06-01 12:00:00'));`,
     },
     {
         title: 'Clean up',
         text: 'DDL and DML go straight to the remote with grainlift_execute.',
-        sql: `SELECT * FROM grainlift_execute(getvariable('pgc'), 'DROP TABLE IF EXISTS sales.top_customers');`,
+        sql: `SELECT * FROM grainlift_execute('pg', 'DROP TABLE IF EXISTS sales.top_customers');`,
     },
 ];
 

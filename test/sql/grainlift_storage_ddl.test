@@ -11,13 +11,13 @@ require-env GRAINLIFT_URI
 require-env GRAINLIFT_TOKEN
 
 statement ok
-SET VARIABLE setup = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_storage_ddl.db'}));
+ATTACH '${GRAINLIFT_URI}' AS setup (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_storage_ddl.db');
 
 statement ok
-CALL grainlift_execute(getvariable('setup')::BIGINT, 'DROP TABLE IF EXISTS t1');
+CALL grainlift_execute('setup', 'DROP TABLE IF EXISTS t1');
 
 statement ok
-CALL grainlift_execute(getvariable('setup')::BIGINT, 'DROP TABLE IF EXISTS t2');
+CALL grainlift_execute('setup', 'DROP TABLE IF EXISTS t2');
 
 statement ok
 ATTACH '${GRAINLIFT_URI}' AS lite (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_storage_ddl.db');
@@ -136,17 +136,17 @@ statement ok
 DETACH lite;
 
 statement ok
-CALL grainlift_disconnect(getvariable('setup')::BIGINT);
+DETACH setup;
 
 # ---- PostgreSQL: schema-qualified DDL, transactional DDL ----
 
 require-env GRAINLIFT_PG
 
 statement ok
-SET VARIABLE pg = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'postgres', 'bearer_token': '${GRAINLIFT_TOKEN}'}));
+ATTACH '${GRAINLIFT_URI}' AS pg (TYPE grainlift, target 'postgres', bearer_token '${GRAINLIFT_TOKEN}');
 
 statement ok
-CALL grainlift_execute(getvariable('pg')::BIGINT, 'DROP TABLE IF EXISTS sales.ddl_t');
+CALL grainlift_execute('pg', 'DROP TABLE IF EXISTS sales.ddl_t');
 
 statement ok
 ATTACH '${GRAINLIFT_URI}' AS pgdb (TYPE grainlift, target 'postgres', bearer_token '${GRAINLIFT_TOKEN}');
@@ -159,7 +159,7 @@ INSERT INTO pgdb.sales.ddl_t VALUES (1, 'one', TIMESTAMP '2026-01-01 00:00:00');
 
 # Created in the attached schema (sales), not the remote default (public)
 query II
-SELECT id, name FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT id, name FROM sales.ddl_t');
+SELECT id, name FROM grainlift_scan('pg', 'SELECT id, name FROM sales.ddl_t');
 ----
 1	one
 
@@ -174,7 +174,7 @@ statement ok
 ROLLBACK;
 
 query I
-SELECT count(*) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM information_schema.tables WHERE table_name = ''ddl_rolled_back''');
+SELECT count(*) FROM grainlift_scan('pg', 'SELECT * FROM information_schema.tables WHERE table_name = ''ddl_rolled_back''');
 ----
 0
 
@@ -182,7 +182,7 @@ statement ok
 DROP TABLE pgdb.sales.ddl_t;
 
 query I
-SELECT count(*) FROM grainlift_scan(getvariable('pg')::BIGINT, 'SELECT * FROM information_schema.tables WHERE table_name = ''ddl_t''');
+SELECT count(*) FROM grainlift_scan('pg', 'SELECT * FROM information_schema.tables WHERE table_name = ''ddl_t''');
 ----
 0
 
@@ -190,4 +190,4 @@ statement ok
 DETACH pgdb;
 
 statement ok
-CALL grainlift_disconnect(getvariable('pg')::BIGINT);
+DETACH pg;

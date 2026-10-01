@@ -1,6 +1,6 @@
 # name: test/sql/grainlift_transactions.test
-# description: test adbc transaction functions (commit, rollback, set_autocommit)
-# group: [adbc]
+# description: grainlift_execute / grainlift_scan follow DuckDB transactions on the attached database
+# group: [grainlift]
 
 require grainlift
 
@@ -10,62 +10,78 @@ require-env GRAINLIFT_URI
 
 require-env GRAINLIFT_TOKEN
 
-# Test grainlift_commit with invalid connection handle
-statement error
-CALL grainlift_commit(12345);
-----
-Invalid Input Error: grainlift_commit: Invalid connection handle: 12345
-
-# Test grainlift_rollback with invalid connection handle
-statement error
-CALL grainlift_rollback(12345);
-----
-Invalid Input Error: grainlift_rollback: Invalid connection handle: 12345
-
-# Test grainlift_set_autocommit with invalid connection handle
-statement error
-CALL grainlift_set_autocommit(12345, false);
-----
-Invalid Input Error: grainlift_set_autocommit: Invalid connection handle: 12345
-
-# Create a connection for transaction tests
+# A file database, so the attachment's connections share one SQLite database.
+# Integer columns only: SQLite reports an empty table's columns as BIGINT.
 statement ok
-SET VARIABLE conn_id = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': ':memory:'}));
+ATTACH '${GRAINLIFT_URI}' AS db (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_grainlift_txn.db');
 
-# Create a test table
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'CREATE TABLE tx_test (id INTEGER, value TEXT)');
+CALL grainlift_execute('db', 'DROP TABLE IF EXISTS tx_test');
 
-# Test rollback - disable autocommit, insert, rollback
+# Outside a transaction grainlift_execute autocommits
+statement ok
+CALL grainlift_execute('db', 'CREATE TABLE tx_test (id INTEGER, qty INTEGER)');
+
+# ROLLBACK undoes grainlift_execute writes made inside the transaction
+statement ok
+BEGIN;
+
+statement ok
+CALL grainlift_execute('db', 'INSERT INTO tx_test VALUES (1, 10)');
+
+# Reads inside the transaction see its own uncommitted writes
 query I
-CALL grainlift_set_autocommit(getvariable('conn_id')::BIGINT, false);
+SELECT count(*) FROM grainlift_scan('db', 'SELECT * FROM tx_test', columns := {'id': 'BIGINT', 'qty': 'BIGINT'});
 ----
-true
+1
 
 statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'INSERT INTO tx_test VALUES (1, ''will rollback'')');
-
-# Rollback the transaction
-query I
-CALL grainlift_rollback(getvariable('conn_id')::BIGINT);
-----
-true
-
-# Test commit - insert data and commit
-statement ok
-CALL grainlift_execute(getvariable('conn_id')::BIGINT, 'INSERT INTO tx_test VALUES (2, ''committed'')');
+ROLLBACK;
 
 query I
-CALL grainlift_commit(getvariable('conn_id')::BIGINT);
+SELECT count(*) FROM grainlift_scan('db', 'SELECT * FROM tx_test', columns := {'id': 'BIGINT', 'qty': 'BIGINT'});
 ----
-true
+0
 
-# Re-enable autocommit
-query I
-CALL grainlift_set_autocommit(getvariable('conn_id')::BIGINT, true);
-----
-true
-
-# Clean up
+# grainlift_execute and writes through the catalog commit together
 statement ok
-CALL grainlift_disconnect(getvariable('conn_id')::BIGINT);
+BEGIN;
+
+statement ok
+CALL grainlift_execute('db', 'INSERT INTO tx_test VALUES (2, 20)');
+
+statement ok
+INSERT INTO db.main.tx_test VALUES (3, 30);
+
+statement ok
+COMMIT;
+
+query II
+SELECT * FROM grainlift_scan('db', 'SELECT id, qty FROM tx_test ORDER BY id', columns := {'id': 'BIGINT', 'qty': 'BIGINT'});
+----
+2	20
+3	30
+
+# ...and roll back together
+statement ok
+BEGIN;
+
+statement ok
+CALL grainlift_execute('db', 'INSERT INTO tx_test VALUES (4, 40)');
+
+statement ok
+INSERT INTO db.main.tx_test VALUES (5, 50);
+
+statement ok
+ROLLBACK;
+
+query I
+SELECT count(*) FROM grainlift_scan('db', 'SELECT * FROM tx_test', columns := {'id': 'BIGINT', 'qty': 'BIGINT'});
+----
+2
+
+statement ok
+CALL grainlift_execute('db', 'DROP TABLE tx_test');
+
+statement ok
+DETACH db;

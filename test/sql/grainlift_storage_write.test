@@ -15,16 +15,16 @@ require-env GRAINLIFT_TOKEN
 # ============================================
 
 statement ok
-SET VARIABLE setup_conn = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_storage_write.db'}));
+ATTACH '${GRAINLIFT_URI}' AS setup_conn (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_storage_write.db');
 
 statement ok
-CALL grainlift_execute(getvariable('setup_conn')::BIGINT, 'DROP TABLE IF EXISTS big');
+CALL grainlift_execute('setup_conn', 'DROP TABLE IF EXISTS big');
 
 statement ok
-CALL grainlift_execute(getvariable('setup_conn')::BIGINT, 'DROP TABLE IF EXISTS small');
+CALL grainlift_execute('setup_conn', 'DROP TABLE IF EXISTS small');
 
 statement ok
-CALL grainlift_disconnect(getvariable('setup_conn')::BIGINT);
+DETACH setup_conn;
 
 statement ok
 ATTACH '${GRAINLIFT_URI}' AS w (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_storage_write.db');

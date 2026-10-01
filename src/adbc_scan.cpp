@@ -55,8 +55,8 @@ struct AdbcColumnStatistics {
 
 // Bind data for grainlift_scan - holds the connection, query, and schema information
 struct AdbcScanBindData : public TableFunctionData {
-    // Connection handle
-    int64_t connection_id;
+    // Attached grainlift database (its ATTACH alias)
+    string database;
     // SQL query to execute
     string query;
     // Connection wrapper (kept alive during scan)
@@ -522,11 +522,11 @@ static unique_ptr<FunctionData> AdbcScanBind(ClientContext &context, TableFuncti
                                               vector<LogicalType> &return_types, vector<string> &names) {
     auto bind_data = make_uniq<AdbcScanBindData>();
 
-    // Check for NULL connection handle first
+    // Check for NULL database name first
     if (input.inputs[0].IsNull()) {
-        throw InvalidInputException("grainlift_scan: Connection handle cannot be NULL");
+        throw InvalidInputException("grainlift_scan: database name cannot be NULL");
     }
-    bind_data->connection_id = input.inputs[0].GetValue<int64_t>();
+    bind_data->database = input.inputs[0].IsNull() ? string() : input.inputs[0].GetValue<string>();
 
     // Check for NULL query before connection validation
     if (input.inputs[1].IsNull()) {
@@ -538,7 +538,7 @@ static unique_ptr<FunctionData> AdbcScanBind(ClientContext &context, TableFuncti
     bind_data->batch_size = ExtractBatchSize(input, "grainlift_scan");
 
     // Now validate and get connection wrapper
-    bind_data->connection = GetValidatedConnection(context, bind_data->connection_id, "grainlift_scan");
+    bind_data->connection = GetAttachedConnection(context, Value(bind_data->database), "grainlift_scan", false);
 
     // Check for params named parameter
     auto params_it = input.named_parameters.find("params");
@@ -848,8 +848,7 @@ static InsertionOrderPreservingMap<string> AdbcScanToString(TableFunctionToStrin
         result["BatchSize"] = to_string(bind_data.batch_size);
     }
 
-    // Show connection ID for debugging
-    result["Connection"] = to_string(bind_data.connection_id);
+    result["Database"] = bind_data.database;
 
     return result;
 }
@@ -876,15 +875,19 @@ static string BuildQualifiedTableName(const string &catalog, const string &schem
     return result;
 }
 
-static unique_ptr<FunctionData> AdbcScanTableBind(ClientContext &context, TableFunctionBindInput &input,
-                                                   vector<LogicalType> &return_types, vector<string> &names) {
+// Bind grainlift_scan_table over an already-resolved connection. ATTACH scans
+// (AdbcTableEntry::GetScanFunction) lease their own pooled connection and bind
+// through this directly; inputs[0] is then just the attached database's name.
+unique_ptr<FunctionData> AdbcScanTableBindWithConnection(ClientContext &context, TableFunctionBindInput &input,
+                                                         shared_ptr<AdbcConnectionWrapper> connection,
+                                                         vector<LogicalType> &return_types, vector<string> &names) {
     auto bind_data = make_uniq<AdbcScanBindData>();
 
-    // Check for NULL connection handle first
+    // Check for NULL database name first
     if (input.inputs[0].IsNull()) {
-        throw InvalidInputException("grainlift_scan_table: Connection handle cannot be NULL");
+        throw InvalidInputException("grainlift_scan_table: database name cannot be NULL");
     }
-    bind_data->connection_id = input.inputs[0].GetValue<int64_t>();
+    bind_data->database = input.inputs[0].IsNull() ? string() : input.inputs[0].GetValue<string>();
 
     // Check for NULL table name before connection validation
     if (input.inputs[1].IsNull()) {
@@ -907,8 +910,8 @@ static unique_ptr<FunctionData> AdbcScanTableBind(ClientContext &context, TableF
     // Extract batch_size parameter
     bind_data->batch_size = ExtractBatchSize(input, "grainlift_scan_table");
 
-    // Validate and get connection wrapper (needed to pick the SQL dialect below)
-    bind_data->connection = GetValidatedConnection(context, bind_data->connection_id, "grainlift_scan_table");
+    // The connection picks the SQL dialect below
+    bind_data->connection = std::move(connection);
 
     // Construct a SELECT * FROM [catalog.][schema.]table_name query for schema
     // discovery, quoting identifiers with the driver's quote char.
@@ -938,6 +941,18 @@ static unique_ptr<FunctionData> AdbcScanTableBind(ClientContext &context, TableF
                               bind_data->table_name, *bind_data);
 
     return std::move(bind_data);
+}
+
+static unique_ptr<FunctionData> AdbcScanTableBind(ClientContext &context, TableFunctionBindInput &input,
+                                                   vector<LogicalType> &return_types, vector<string> &names) {
+    if (input.inputs[0].IsNull()) {
+        throw InvalidInputException("grainlift_scan_table: database name cannot be NULL");
+    }
+    if (input.inputs[1].IsNull()) {
+        throw InvalidInputException("grainlift_scan_table: Table name cannot be NULL");
+    }
+    auto connection = GetAttachedConnection(context, input.inputs[0], "grainlift_scan_table", false);
+    return AdbcScanTableBindWithConnection(context, input, std::move(connection), return_types, names);
 }
 
 // Global init for grainlift_scan_table - builds projected query based on column_ids and filters
@@ -1085,7 +1100,8 @@ static unique_ptr<GlobalTableFunctionState> AdbcScanTableInitGlobal(ClientContex
             }
         }
         if (expected.empty()) {
-            expected = bind_data.return_types;
+            // count-only scan: the query selects one BIGINT constant (see above)
+            expected = {LogicalType::BIGINT};
         }
         global_state->expected_types = std::move(expected);
         ValidateStreamSchema(global_state->projected_arrow_table, global_state->expected_types, false);
@@ -1202,8 +1218,7 @@ static InsertionOrderPreservingMap<string> AdbcScanTableToString(TableFunctionTo
         result["BatchSize"] = to_string(bind_data.batch_size);
     }
 
-    // Show connection ID for debugging
-    result["Connection"] = to_string(bind_data.connection_id);
+    result["Database"] = bind_data.database;
 
     return result;
 }
@@ -1404,11 +1419,24 @@ static unique_ptr<FunctionData> AdbcScanDeserialize(Deserializer &deserializer, 
     throw NotImplementedException("ADBC scans cannot be serialized");
 }
 
+// Remote tables have no DuckDB rowid. Advertise no virtual columns (as vgi does
+// for workers without a rowid column): when a query needs no column (count(*)),
+// DuckDB then reads the first real column, instead of the rowid inherited from
+// TableCatalogEntry, which the scan filled from whatever the first remote column
+// was ("Could not convert string 'United States' to INT64" on a view).
+static virtual_column_map_t AdbcScanGetVirtualColumns(ClientContext &, optional_ptr<FunctionData>) {
+    return {};
+}
+
+static vector<column_t> AdbcScanGetRowIdColumns(ClientContext &, optional_ptr<FunctionData>) {
+    return {};
+}
+
 // Register the grainlift_scan table function
 void RegisterAdbcTableFunctions(DatabaseInstance &db) {
     ExtensionLoader loader(db, "grainlift");
 
-    TableFunction adbc_scan_function("grainlift_scan", {LogicalType::BIGINT, LogicalType::VARCHAR}, AdbcScanFunction,
+    TableFunction adbc_scan_function("grainlift_scan", {LogicalType::VARCHAR, LogicalType::VARCHAR}, AdbcScanFunction,
                                       AdbcScanBind, AdbcScanInitGlobal, AdbcScanInitLocal);
 
     // Add named parameter for bind parameters (accepts a STRUCT from row(...))
@@ -1428,24 +1456,26 @@ void RegisterAdbcTableFunctions(DatabaseInstance &db) {
     adbc_scan_function.to_string = AdbcScanToString;
     adbc_scan_function.serialize = AdbcScanSerialize;
     adbc_scan_function.deserialize = AdbcScanDeserialize;
+    adbc_scan_function.get_virtual_columns = AdbcScanGetVirtualColumns;
+    adbc_scan_function.get_row_id_columns = AdbcScanGetRowIdColumns;
 
     CreateTableFunctionInfo info(adbc_scan_function);
     FunctionDescription desc;
-    desc.description = "Execute a SELECT query on an ADBC connection and return the results as a table";
-    desc.parameter_names = {"connection_handle", "query", "params", "batch_size"};
-    desc.parameter_types = {LogicalType::BIGINT, LogicalType::VARCHAR, LogicalType::ANY, LogicalType::BIGINT};
-    desc.examples = {"SELECT * FROM grainlift_scan(conn, 'SELECT * FROM users')",
-                     "SELECT * FROM grainlift_scan(conn, 'SELECT * FROM users WHERE id = ?', params := row(42))",
-                     "SELECT * FROM grainlift_scan(conn, 'SELECT * FROM large_table', batch_size := 65536)"};
+    desc.description = "Execute a SELECT query on an attached grainlift database and return the results as a table";
+    desc.parameter_names = {"database", "query", "params", "batch_size"};
+    desc.parameter_types = {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::ANY, LogicalType::BIGINT};
+    desc.examples = {"SELECT * FROM grainlift_scan('pg', 'SELECT * FROM users')",
+                     "SELECT * FROM grainlift_scan('pg', 'SELECT * FROM users WHERE id = ?', params := row(42))",
+                     "SELECT * FROM grainlift_scan('pg', 'SELECT * FROM large_table', batch_size := 65536)"};
     desc.categories = {"grainlift"};
     info.descriptions.push_back(std::move(desc));
     loader.RegisterFunction(info);
 
     // ========================================================================
-    // grainlift_scan_table - Scan an entire table from an ADBC connection
+    // grainlift_scan_table - Scan an entire table from an attached grainlift database
     // ========================================================================
 
-    TableFunction adbc_scan_table_function("grainlift_scan_table", {LogicalType::BIGINT, LogicalType::VARCHAR},
+    TableFunction adbc_scan_table_function("grainlift_scan_table", {LogicalType::VARCHAR, LogicalType::VARCHAR},
                                             AdbcScanTableFunction, AdbcScanTableBind, AdbcScanTableInitGlobal, AdbcScanTableInitLocal);
 
     // Add named parameters for catalog, schema, and batch size
@@ -1465,15 +1495,17 @@ void RegisterAdbcTableFunctions(DatabaseInstance &db) {
     adbc_scan_table_function.to_string = AdbcScanTableToString;
     adbc_scan_table_function.serialize = AdbcScanSerialize;
     adbc_scan_table_function.deserialize = AdbcScanDeserialize;
+    adbc_scan_table_function.get_virtual_columns = AdbcScanGetVirtualColumns;
+    adbc_scan_table_function.get_row_id_columns = AdbcScanGetRowIdColumns;
 
     CreateTableFunctionInfo scan_table_info(adbc_scan_table_function);
     FunctionDescription scan_table_desc;
-    scan_table_desc.description = "Scan an entire table from an ADBC connection";
-    scan_table_desc.parameter_names = {"connection_handle", "table_name", "catalog", "schema", "batch_size"};
-    scan_table_desc.parameter_types = {LogicalType::BIGINT, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BIGINT};
-    scan_table_desc.examples = {"SELECT * FROM grainlift_scan_table(conn, 'users')",
-                                "SELECT * FROM grainlift_scan_table(conn, 'users', schema := 'public')",
-                                "SELECT * FROM grainlift_scan_table(conn, 'large_table', batch_size := 65536)"};
+    scan_table_desc.description = "Scan an entire table from an attached grainlift database";
+    scan_table_desc.parameter_names = {"database", "table_name", "catalog", "schema", "batch_size"};
+    scan_table_desc.parameter_types = {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BIGINT};
+    scan_table_desc.examples = {"SELECT * FROM grainlift_scan_table('pg', 'users')",
+                                "SELECT * FROM grainlift_scan_table('pg', 'users', schema := 'public')",
+                                "SELECT * FROM grainlift_scan_table('pg', 'large_table', batch_size := 65536)"};
     scan_table_desc.categories = {"grainlift"};
     scan_table_info.descriptions.push_back(std::move(scan_table_desc));
     loader.RegisterFunction(scan_table_info);

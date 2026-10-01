@@ -15,34 +15,35 @@ grainlift service over Iroh through the page's Iroh adapter Worker.
 ```sql
 LOAD grainlift;
 
--- A connection handle
-SET VARIABLE conn = (SELECT grainlift_connect({
-    'uri': 'grainlift+https://grainlift.example.com',   -- or grainlift+iroh://<endpoint-id>
-    'target': 'warehouse',
-    'bearer_token': '...'
-}));
-SELECT * FROM grainlift_scan(getvariable('conn')::BIGINT, 'SELECT * FROM orders LIMIT 10');
-
--- Or attach the remote database
+-- Attach the remote database (or grainlift+iroh://<endpoint-id>)
 ATTACH 'grainlift+https://grainlift.example.com' AS wh (TYPE grainlift, TARGET 'warehouse', BEARER_TOKEN '...');
 SELECT count(*) FROM wh.orders WHERE status = 'open';   -- filters and projections are pushed down
 CREATE TABLE wh.snapshot AS SELECT * FROM local_table;  -- bulk ingestion
 CREATE TABLE wh.events (id BIGINT, name VARCHAR);        -- remote DDL, in the driver's dialect
 DROP TABLE wh.events;
+
+-- Run SQL in the remote database's own dialect, naming the attachment by its alias
+SELECT * FROM grainlift_scan('wh', 'SELECT * FROM orders LIMIT 10');
+CALL grainlift_execute('wh', 'CREATE INDEX orders_status ON orders (status)');
 ```
+
+The `grainlift_*` functions take the attached database's alias. Inside a
+`BEGIN … COMMIT` transaction, `grainlift_execute` and `grainlift_insert` join the
+attachment's transaction (they commit or roll back with writes made through
+`wh.…`), and reads see its uncommitted writes; otherwise they autocommit.
 
 | Function | Purpose |
 | --- | --- |
-| `grainlift_connect(options)` | Open a connection; returns a handle |
-| `grainlift_disconnect`, `grainlift_commit`, `grainlift_rollback`, `grainlift_set_autocommit` | Connection commands (`CALL`) |
-| `grainlift_scan(handle, sql, params := ..., columns := ..., batch_size := ...)` | Run a query remotely |
-| `grainlift_scan_table(handle, table)` | Scan a table with filter/projection pushdown |
-| `grainlift_execute(handle, sql)` | DDL/DML |
-| `grainlift_insert(handle, table, (SELECT ...), mode := ...)` | Bulk ingestion |
+| `grainlift_scan(database, sql, params := ..., columns := ..., batch_size := ...)` | Run a query remotely |
+| `grainlift_scan_table(database, table)` | Scan a table with filter/projection pushdown |
+| `grainlift_execute(database, sql)` | DDL/DML |
+| `grainlift_insert(database, table, (SELECT ...), mode := ...)` | Bulk ingestion |
 | `grainlift_info`, `grainlift_tables`, `grainlift_table_types`, `grainlift_columns`, `grainlift_schema` | Metadata |
 | `grainlift_clear_cache()` | Drop cached ATTACH metadata |
 
-Connection options (also usable as ATTACH options and in `CREATE SECRET (TYPE grainlift, ...)`):
+`database` is the alias of an `ATTACH … (TYPE grainlift)` database.
+
+ATTACH options (also usable in `CREATE SECRET (TYPE grainlift, ...)`):
 
 | Option | Meaning |
 | --- | --- |

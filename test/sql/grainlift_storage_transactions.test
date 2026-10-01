@@ -12,13 +12,13 @@ require-env GRAINLIFT_TOKEN
 
 # Clean slate
 statement ok
-SET VARIABLE c = (SELECT grainlift_connect({'uri': '${GRAINLIFT_URI}', 'target': 'sqlite', 'bearer_token': '${GRAINLIFT_TOKEN}', 'remote_uri': '/tmp/test_storage_txn.db'}));
+ATTACH '${GRAINLIFT_URI}' AS c (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_storage_txn.db');
 
 statement ok
-CALL grainlift_execute(getvariable('c')::BIGINT, 'DROP TABLE IF EXISTS t');
+CALL grainlift_execute('c', 'DROP TABLE IF EXISTS t');
 
 statement ok
-CALL grainlift_disconnect(getvariable('c')::BIGINT);
+DETACH c;
 
 statement ok
 ATTACH '${GRAINLIFT_URI}' AS w (TYPE grainlift, target 'sqlite', bearer_token '${GRAINLIFT_TOKEN}', remote_uri '/tmp/test_storage_txn.db');
