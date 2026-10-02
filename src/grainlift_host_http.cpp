@@ -47,15 +47,20 @@ int32_t Execute(void *host_ctx, const GrainliftHttpRequest *request, GrainliftHt
 	try {
 		auto &ctx = *static_cast<GrainliftHostContext *>(host_ctx);
 		auto db = ctx.db.lock();
-		if (!db) {
+		// Shutting down: the catalog is closing its sessions (see the context).
+		auto shutting_down = !db;
+		auto *instance = db ? db.get() : ctx.instance;
+		if (!instance) {
 			return Fail(out, owned, "grainlift: DuckDB instance is no longer available");
 		}
 		string method(request->method);
 		string url(request->url);
 
-		auto &http_util = HTTPUtil::Get(*db);
-		auto params = http_util.InitializeParameters(*db, url);
-		SetTimeout(*params, request->timeout_ms);
+		auto &http_util = HTTPUtil::Get(*instance);
+		auto params = http_util.InitializeParameters(*instance, url);
+		// Closing sessions is best effort: an unreachable gateway must not stall
+		// DuckDB's exit for the full request timeout.
+		SetTimeout(*params, shutting_down ? std::min<uint32_t>(request->timeout_ms, 2000) : request->timeout_ms);
 		// vgi-rpc owns retry policy; a transparent retry here could replay a
 		// non-idempotent stream exchange.
 		params->retries = 0;
@@ -172,6 +177,7 @@ void RegisterGrainliftHostHttp() {
 shared_ptr<GrainliftHostContext> CreateGrainliftHostContext(DatabaseInstance &db) {
 	auto ctx = make_shared_ptr<GrainliftHostContext>();
 	ctx->db = db.shared_from_this();
+	ctx->instance = &db;
 	return ctx;
 }
 
