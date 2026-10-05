@@ -66,6 +66,18 @@ grainlift-demo.query-farm.services).
 
 ## Gotchas
 
+- Secret lookup for ATTACH does not use DuckDB's `LookupSecret` (a plain string
+  prefix match, under which an empty scope matches everything). It is
+  `AdbcGetSecretByUri` in `src/adbc_secrets.cpp`: scheme-normalized like the
+  driver's `normalize_endpoint`, matching only at a URL boundary, unscoped
+  secrets never matching, `attach_secret`/`secret` naming one or `''`
+  disabling lookup. Same model as the VGI extension's `vgi_attach` secrets
+  (`~/Development/vgi/docs/attach_credentials.md`). Secret values are merged
+  into the driver options only; credential-looking ATTACH options and
+  `key=value` path parts are redacted before DuckDB stores them for
+  `duckdb_databases()`. `test/sql/grainlift_secret_boundary.test` needs no
+  server.
+
 - The `duckdb` submodule must match the haybarn-wasm engine revision exactly
   (indirect-call signature mismatches otherwise). Test against the published
   `@haybarn/haybarn-wasm` npm package; a local haybarn-wasm `dist/` may be stale.

@@ -128,7 +128,7 @@ shared_ptr<AdbcConnectionWrapper> CreateConnectionFromOptions(ClientContext &con
 	auto &aliases = GrainliftOptionAliases();
 	for (const auto &opt : options) {
 		auto key = opt.first;
-		if (StringUtil::CIEquals(key, "secret")) {
+		if (StringUtil::CIEquals(key, "secret") || StringUtil::CIEquals(key, "attach_secret")) {
 			continue; // used for lookup only
 		}
 		if (StringUtil::CIEquals(key, "dialect")) {

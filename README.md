@@ -55,11 +55,51 @@ ATTACH options (also usable in `CREATE SECRET (TYPE grainlift, ...)`):
 | `request_timeout_ms`, `max_response_bytes`, `max_bind_bytes` | Driver limits |
 | `remote_uri` | The downstream driver's `uri`, when the target allows it |
 | `dialect` | Override SQL dialect detection for pushdown (default: remote vendor name) |
-| `secret` | Name of a `grainlift` secret to use |
+| `attach_secret` (`secret`) | Name of a `grainlift` secret to use; `''` turns secret lookup off for this ATTACH |
 | anything else | Forwarded to the downstream driver as a database option |
 
-Secrets are matched by the `uri` scope, so `CREATE SECRET (TYPE grainlift, URI '...', TARGET '...', BEARER_TOKEN '...')`
-lets `ATTACH '<uri>' AS x (TYPE grainlift)` connect with no further options.
+### Credentials from secrets
+
+`CREATE SECRET (TYPE grainlift, URI '...', TARGET '...', BEARER_TOKEN '...')`
+lets `ATTACH '<uri>' AS x (TYPE grainlift)` connect with no further options, so
+the ATTACH text carries no credential. The secret is chosen once per ATTACH,
+from the user's own inputs only:
+
+1. `attach_secret '<name>'` (or `secret '<name>'`): that secret. It must exist
+   and be of type `grainlift`; its scope is not checked.
+2. `attach_secret ''`: no secret at all.
+3. Otherwise the `grainlift` secret whose scope (default: its `URI`) best
+   matches the ATTACH URI, **ending at a URL boundary**: the scope equals the
+   URI, ends in `/`, or the URI continues with `/`, `?`, `#` or `:`. So
+   `grainlift+https://gw.example.com` matches `…gw.example.com/db`,
+   `…gw.example.com:443` and `…gw.example.com?x`, but not
+   `…gw.example.com.evil.net` or `…gw.example.comx`. The scheme is compared the
+   way the driver reads it: `grainlift://` is `https://` and
+   `grainlift+<transport>://` is `<transport>://` (so a secret scoped to
+   `grainlift://gw` serves `grainlift+https://gw/…`).
+   **A secret without a scope (`SCOPE ''`) never matches**: it is used only
+   when named.
+
+Options given in the ATTACH clause (or a `key=value;…` path) override the same
+keys from the secret. `grainlift_which_secret(uri [, attach_secret])` returns
+the name of the secret an ATTACH would use (NULL for none), resolved the same
+way.
+
+Credentials stay out of `duckdb_databases()`: values that came from a secret are
+never written into the attachment's options, and credential options given
+inline (`bearer_token`, `token`, `password`, `oauth_refresh_token`,
+`oauth_client_secret`, and any key containing `password`, `secret`,
+`credential` or `api_key`, or ending in `token`) show as `<redacted>` in its
+`options` and `path`. The extension writes no logs and keeps no cache keyed by
+options. `duckdb_secrets()` redacts the same keys, and every `extra_options` key.
+
+**Behaviour change (0.5.0).** Earlier versions used DuckDB's plain prefix match,
+so a secret scoped to `grainlift+https://gw.example.com` was also sent to
+`grainlift+https://gw.example.com.evil.net`, and a secret with an empty scope
+was sent to every gateway. Neither is picked up automatically any more: give
+such a secret a scope that ends at the host (or path), or name it with
+`attach_secret`. `secret ''`, a no-op before, now disables lookup like
+`attach_secret ''`, and naming a secret of another type is an error.
 
 ### In the browser (Haybarn)
 

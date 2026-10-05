@@ -71,8 +71,19 @@ static unique_ptr<Catalog> AdbcAttach(optional_ptr<StorageExtensionInfo> storage
 	// Create the connection using the shared helper
 	auto connection = CreateConnectionFromOptions(context, options);
 
+	// Credentials never reach duckdb_databases(): AttachedDatabase keeps
+	// attach_options.options (its `options` column) and the catalog's path (its
+	// `path` column). Values taken from a secret were merged into `options`
+	// above and are never written back here.
+	for (auto &entry : attach_options.options) {
+		if (IsGrainliftCredentialOption(entry.first)) {
+			entry.second = Value("<redacted>");
+		}
+	}
+
 	// Create and return the catalog
-	auto catalog = make_uniq<AdbcCatalog>(db, connection, info.path, attach_options.access_mode);
+	auto catalog = make_uniq<AdbcCatalog>(db, connection, RedactGrainliftAttachPath(info.path),
+	                                      attach_options.access_mode);
 	catalog->batch_size = batch_size;
 	return catalog;
 }
