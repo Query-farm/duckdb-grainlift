@@ -58,6 +58,18 @@ ATTACH options (also usable in `CREATE SECRET (TYPE grainlift, ...)`):
 | `attach_secret` (`secret`) | Name of a `grainlift` secret to use; `''` turns secret lookup off for this ATTACH |
 | anything else | Forwarded to the downstream driver as a database option |
 
+### HTTP request costs
+
+Version 0.6.0 embeds the Grainlift 0.5 driver and requires a protocol 0.5
+gateway. HTTP capabilities arrive with `open_connection`; the driver makes no
+`/health` probe. When the selected backend explicitly declares statistics
+unsupported, metadata planning returns `NOT_IMPLEMENTED` locally. Table schemas
+are still fetched for each query. Session reopen refreshes the capability flags.
+
+The Cloudflare demo's two-table warm join uses 21 requests instead of 25 while
+retaining its two schema requests. `browser-test/profile-http.mjs` checks this
+behavior, direct table scans, catalog refresh, and cold connection setup.
+
 ### Credentials from secrets
 
 `CREATE SECRET (TYPE grainlift, URI '...', TARGET '...', BEARER_TOKEN '...')`
