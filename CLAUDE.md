@@ -56,7 +56,7 @@ Consequences for decisions in this repo:
 
 See README.md. In short: `git submodule update --init --recursive`; native
 `make release` (vcpkg for openssl/curl); WASM `scripts/build-wasm.sh
-wasm_threads|wasm_eh` (emsdk 5.0.7, Rust `nightly-2026-05-20` + rust-src,
+wasm_threads|wasm_eh` (emsdk 6.0.13 on the Haybarn 2.0 branch, Rust `nightly-2026-05-20` + rust-src,
 `-Z build-std` so Rust uses native wasm EH — the script fails on legacy EH
 imports). Tests need a grainlift server: `scripts/test-server.sh` (SQLite +
 throwaway PostgreSQL), then the unittest runner with

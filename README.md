@@ -140,7 +140,7 @@ git submodule update --init --recursive
 # Native (loads httpfs for HTTP); vcpkg provides openssl/curl for httpfs.
 VCPKG_TOOLCHAIN_PATH=~/Development/vcpkg/scripts/buildsystems/vcpkg.cmake GEN=ninja make release
 
-# DuckDB-WASM, COI (wasm_threads) and eh; needs emsdk 5.0.7 and
+# DuckDB-WASM, COI (wasm_threads) and eh; needs emsdk 6.0.13 (Haybarn 2.0) and
 # rustup toolchain nightly-2026-05-20 with rust-src + wasm32-unknown-emscripten.
 scripts/build-wasm.sh wasm_threads
 scripts/build-wasm.sh wasm_eh

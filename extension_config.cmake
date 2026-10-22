@@ -19,6 +19,6 @@ duckdb_extension_load(grainlift
 if(NOT EMSCRIPTEN)
     duckdb_extension_load(httpfs
         GIT_URL https://github.com/Query-farm-haybarn/haybarn-httpfs
-        GIT_TAG 94d8fee
+        GIT_TAG 9c5025d
     )
 endif()

@@ -4,7 +4,7 @@
 #   scripts/build-wasm.sh [wasm_threads|wasm_eh]     (default: wasm_threads, the COI build)
 #
 # Env:
-#   EMSDK_DIR            emsdk checkout with 5.0.7 activated (default ~/Development/emsdk)
+#   EMSDK_DIR            emsdk checkout with 6.0.13 activated (Haybarn 2.0) (default ~/Development/emsdk)
 #   GRAINLIFT_SOURCE_DIR grainlift Cargo workspace (default ./grainlift)
 #   DEPLOY_DIR           optional: copy the .wasm into this local extension repository
 #                        directory (e.g. <repo>/<engine-rev>/wasm_threads)
