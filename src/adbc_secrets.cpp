@@ -167,7 +167,7 @@ static unique_ptr<SecretEntry> GetGrainliftSecretByName(ClientContext &context, 
 	}
 	if (!StringUtil::CIEquals(secret_entry->secret->GetType().GetIdentifierName(), "grainlift")) {
 		throw BinderException("Secret \"%s\" is of type '%s', not 'grainlift'", secret_name,
-		                      secret_entry->secret->GetType());
+		                      secret_entry->secret->GetType().GetIdentifierName());
 	}
 	return secret_entry;
 }

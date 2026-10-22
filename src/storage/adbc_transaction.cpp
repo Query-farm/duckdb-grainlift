@@ -50,7 +50,7 @@ ClientContext &AdbcTransaction::GetContext() {
 shared_ptr<AdbcConnectionWrapper> AdbcTransaction::GetWriteConnection() {
 	if (adbc_catalog.access_mode == AccessMode::READ_ONLY) {
 		throw PermissionException("Cannot write to ADBC database \"%s\" — it is attached read-only",
-		                          adbc_catalog.GetName());
+		                          adbc_catalog.GetName().GetIdentifierName());
 	}
 	if (!write_lease.HasConnection()) {
 		// Pin a dedicated connection for the lifetime of this transaction so all
