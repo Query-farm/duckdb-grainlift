@@ -164,4 +164,16 @@ private:
     AdbcError error;
 };
 
+// Name a table function's positional parameters before it is registered, so
+// duckdb_functions() lists them by name instead of a generated colN. In DuckDB
+// 2.0 parameter names live in the function's signature; named (keyword-only)
+// parameters are declared with GetSignature().AddKeywordOnly(...).
+inline void NameParameters(TableFunction &function, const vector<string> &positional_names) {
+    auto &signature = function.GetSignature();
+    D_ASSERT(positional_names.size() <= signature.GetParameterCount());
+    for (idx_t i = 0; i < positional_names.size(); i++) {
+        signature.GetParameter(i).SetName(Identifier(positional_names[i]));
+    }
+}
+
 } // namespace adbc_scanner

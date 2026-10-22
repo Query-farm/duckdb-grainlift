@@ -1,4 +1,5 @@
 #include "adbc_secrets.hpp"
+#include "duckdb/common/optional.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/vector_operations/unary_executor.hpp"
@@ -89,7 +90,7 @@ unique_ptr<SecretEntry> AdbcGetSecretByUri(ClientContext &context, const string 
 	int64_t best_length = -1;
 	int64_t best_rank = 0;
 	for (auto &entry : secret_manager.AllSecrets(transaction)) {
-		if (!entry.secret || !StringUtil::CIEquals(entry.secret->GetType(), "grainlift")) {
+		if (!entry.secret || !StringUtil::CIEquals(entry.secret->GetType().GetIdentifierName(), "grainlift")) {
 			continue;
 		}
 		int64_t length = -1;
@@ -164,7 +165,7 @@ static unique_ptr<SecretEntry> GetGrainliftSecretByName(ClientContext &context, 
 	if (!secret_entry) {
 		throw BinderException("Secret with name \"%s\" not found", secret_name);
 	}
-	if (!StringUtil::CIEquals(secret_entry->secret->GetType(), "grainlift")) {
+	if (!StringUtil::CIEquals(secret_entry->secret->GetType().GetIdentifierName(), "grainlift")) {
 		throw BinderException("Secret \"%s\" is of type '%s', not 'grainlift'", secret_name,
 		                      secret_entry->secret->GetType());
 	}
@@ -222,7 +223,7 @@ AdbcOptions MergeSecretOptions(ClientContext &context, const AdbcOptions &explic
 		const auto &kv_secret = dynamic_cast<const KeyValueSecret &>(*secret_entry->secret);
 		for (const auto &entry : kv_secret.secret_map) {
 			if (!entry.second.IsNull()) {
-				merged_options.emplace_back(entry.first, entry.second);
+				merged_options.emplace_back(entry.first.GetIdentifierName(), entry.second);
 			}
 		}
 	}
@@ -295,7 +296,7 @@ static unique_ptr<BaseSecret> CreateAdbcSecretFunction(ClientContext &context, C
 		    lower_name == "oauth_refresh_token" || lower_name == "oauth_token_endpoint" ||
 		    lower_name == "oauth_client_id" || lower_name == "oauth_client_secret" || lower_name == "remote_uri" ||
 		    lower_name == "username" || lower_name == "password" || lower_name == "database") {
-			result->secret_map[lower_name] = named_param.second.ToString();
+			result->secret_map[Identifier(lower_name)] = named_param.second.ToString();
 		} else if (lower_name == "extra_options") {
 			// extra_options is a MAP of string -> string for driver-specific options
 			auto &map_value = named_param.second;
@@ -306,8 +307,8 @@ static unique_ptr<BaseSecret> CreateAdbcSecretFunction(ClientContext &context, C
 					if (entry_children.size() == 2 && !entry_children[0].IsNull()) {
 						auto key = entry_children[0].ToString();
 						auto val = entry_children[1].IsNull() ? "" : entry_children[1].ToString();
-						result->secret_map[key] = val;
-						result->redact_keys.insert(key);
+						result->secret_map[Identifier(key)] = val;
+						result->redact_keys.insert(Identifier(key));
 					}
 				}
 			}
@@ -317,15 +318,15 @@ static unique_ptr<BaseSecret> CreateAdbcSecretFunction(ClientContext &context, C
 	// Redact sensitive keys by default
 	for (auto key : {"password", "bearer_token", "oauth_refresh_token", "oauth_client_secret", "auth_token", "token",
 	                 "secret", "api_key", "apikey", "credential"}) {
-		result->redact_keys.insert(key);
+		result->redact_keys.insert(Identifier(key));
 	}
 	for (auto &entry : result->secret_map) {
-		if (IsGrainliftCredentialOption(entry.first)) {
+		if (IsGrainliftCredentialOption(entry.first.GetIdentifierName())) {
 			result->redact_keys.insert(entry.first);
 		}
 	}
 
-	return result;
+	return std::move(result);
 }
 
 // grainlift_which_secret(uri [, attach_secret]): the name of the grainlift
@@ -339,28 +340,28 @@ static string_t WhichSecret(ClientContext &context, Vector &result, const string
 		options.emplace_back("attach_secret", secret_option);
 	}
 	auto entry = ResolveGrainliftSecret(context, options);
-	return StringVector::AddString(result, entry ? entry->secret->GetName() : string());
+	return StringVector::AddString(result, entry ? entry->secret->GetName().GetIdentifierName() : string());
 }
 
 static void WhichSecretFunction(DataChunk &args, ExpressionState &state, Vector &result) {
 	auto &context = state.GetContext();
 	if (args.ColumnCount() == 1) {
-		UnaryExecutor::ExecuteWithNulls<string_t, string_t>(
-		    args.data[0], result, args.size(), [&](string_t uri, ValidityMask &mask, idx_t idx) {
+		// A lambda returning optional adds NULLs (DuckDB 2.0's ExecuteWithNulls)
+		UnaryExecutor::Execute<string_t, string_t>(
+		    args.data[0], result, args.size(), [&](string_t uri) -> optional<string_t> {
 			    auto name = WhichSecret(context, result, uri.GetString(), Value());
 			    if (name.GetSize() == 0) {
-				    mask.SetInvalid(idx);
+				    return nullopt;
 			    }
 			    return name;
 		    });
 		return;
 	}
-	BinaryExecutor::ExecuteWithNulls<string_t, string_t, string_t>(
-	    args.data[0], args.data[1], result, args.size(),
-	    [&](string_t uri, string_t secret, ValidityMask &mask, idx_t idx) {
+	BinaryExecutor::Execute<string_t, string_t, string_t>(
+	    args.data[0], args.data[1], result, args.size(), [&](string_t uri, string_t secret) -> optional<string_t> {
 		    auto name = WhichSecret(context, result, uri.GetString(), Value(secret.GetString()));
 		    if (name.GetSize() == 0) {
-			    mask.SetInvalid(idx);
+			    return nullopt;
 		    }
 		    return name;
 	    });

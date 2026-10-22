@@ -194,7 +194,7 @@ static bool ExplicitSchema(ClientContext &context, TableFunctionBindInput &input
         if (children[i].IsNull() || children[i].type().id() != LogicalTypeId::VARCHAR) {
             throw InvalidInputException("column types must be non-NULL strings");
         }
-        names.push_back(StructType::GetChildName(value.type(), i));
+        names.push_back(StructType::GetChildName(value.type(), i).GetIdentifierName());
         types.push_back(TransformStringToLogicalType(children[i].GetValue<string>(), context));
     }
     auto properties = context.GetClientProperties();
@@ -216,7 +216,7 @@ static void ValidateStreamSchema(ArrowTableSchema &stream, const vector<LogicalT
 
 // Helper to populate return types and names from Arrow schema
 static void PopulateReturnTypesFromSchema(ClientContext &context, AdbcScanBindData &bind_data,
-                                           vector<LogicalType> &return_types, vector<string> &names) {
+                                           vector<LogicalType> &return_types, vector<Identifier> &names) {
     // Convert Arrow schema to DuckDB types
     AdbcPopulateArrowTableSchema(context, bind_data.arrow_table,
                                                   bind_data.schema_root.arrow_schema);
@@ -226,7 +226,7 @@ static void PopulateReturnTypesFromSchema(ClientContext &context, AdbcScanBindDa
     for (int64_t i = 0; i < arrow_schema.n_children; i++) {
         auto &child = *arrow_schema.children[i];
         string col_name = child.name ? child.name : "column" + to_string(i);
-        names.push_back(col_name);
+        names.emplace_back(col_name);
 
         auto arrow_type = bind_data.arrow_table.GetColumns().at(i);
         return_types.push_back(arrow_type->GetDuckType());
@@ -523,7 +523,7 @@ static void BindParameters(ClientContext &context, AdbcStatementWrapper &stateme
 
 // Bind function - validates inputs and gets schema
 static unique_ptr<FunctionData> AdbcScanBind(ClientContext &context, TableFunctionBindInput &input,
-                                              vector<LogicalType> &return_types, vector<string> &names) {
+                                              vector<LogicalType> &return_types, vector<Identifier> &names) {
     auto bind_data = make_uniq<AdbcScanBindData>();
 
     // Check for NULL database name first
@@ -885,7 +885,7 @@ static string BuildQualifiedTableName(const string &catalog, const string &schem
 // through this directly; inputs[0] is then just the attached database's name.
 unique_ptr<FunctionData> AdbcScanTableBindWithConnection(ClientContext &context, TableFunctionBindInput &input,
                                                          shared_ptr<AdbcConnectionWrapper> connection,
-                                                         vector<LogicalType> &return_types, vector<string> &names) {
+                                                         vector<LogicalType> &return_types, vector<Identifier> &names) {
     auto bind_data = make_uniq<AdbcScanBindData>();
 
     // Check for NULL database name first
@@ -936,7 +936,7 @@ unique_ptr<FunctionData> AdbcScanTableBindWithConnection(ClientContext &context,
     PopulateReturnTypesFromSchema(context, *bind_data, return_types, names);
 
     // Store all column names for projection pushdown
-    bind_data->all_column_names = names;
+    bind_data->all_column_names = IdentifiersToStrings(names);
 
     // Store return types for statistics callback
     bind_data->return_types = return_types;
@@ -949,7 +949,7 @@ unique_ptr<FunctionData> AdbcScanTableBindWithConnection(ClientContext &context,
 }
 
 static unique_ptr<FunctionData> AdbcScanTableBind(ClientContext &context, TableFunctionBindInput &input,
-                                                   vector<LogicalType> &return_types, vector<string> &names) {
+                                                   vector<LogicalType> &return_types, vector<Identifier> &names) {
     if (input.inputs[0].IsNull()) {
         throw InvalidInputException("grainlift_scan_table: database name cannot be NULL");
     }
@@ -1417,11 +1417,11 @@ static unique_ptr<BaseStatistics> AdbcScanTableStatistics(ClientContext &context
 // common-subplan optimizer wraps serialization in a try/catch precisely so a scan can
 // opt out this way.
 static void AdbcScanSerialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data,
-                              const TableFunction &function) {
+                              const BoundTableFunction &function) {
     throw NotImplementedException("ADBC scans cannot be serialized");
 }
 
-static unique_ptr<FunctionData> AdbcScanDeserialize(Deserializer &deserializer, TableFunction &function) {
+static unique_ptr<FunctionData> AdbcScanDeserialize(Deserializer &deserializer, BoundTableFunction &function) {
     throw NotImplementedException("ADBC scans cannot be serialized");
 }
 
@@ -1445,12 +1445,14 @@ void RegisterAdbcTableFunctions(DatabaseInstance &db) {
     TableFunction adbc_scan_function("grainlift_scan", {LogicalType::VARCHAR, LogicalType::VARCHAR}, AdbcScanFunction,
                                       AdbcScanBind, AdbcScanInitGlobal, AdbcScanInitLocal);
 
-    // Add named parameter for bind parameters (accepts a STRUCT from row(...))
-    adbc_scan_function.named_parameters["params"] = LogicalType::ANY;
-    adbc_scan_function.named_parameters["columns"] = LogicalType::ANY;
-
-    // Add named parameter for batch size hint (driver-specific, best-effort)
-    adbc_scan_function.named_parameters["batch_size"] = LogicalType::BIGINT;
+    // Optional named parameters: a call that leaves one out does not pass it.
+    adbc_scan_function.GetSignature().WithTypedKwargs("kwargs", [](TypedKwargs &options) {
+        // Bind parameters (accepts a STRUCT from row(...))
+        options.Add("params", LogicalType::ANY);
+        options.Add("columns", LogicalType::ANY);
+        // Batch size hint (driver-specific, best-effort)
+        options.Add("batch_size", LogicalType::BIGINT);
+    });
 
     // Enable projection pushdown - DuckDB will request only the columns it needs
     // The ADBC driver still returns all columns, but ArrowToDuckDB will extract only the needed ones
@@ -1465,11 +1467,10 @@ void RegisterAdbcTableFunctions(DatabaseInstance &db) {
     adbc_scan_function.get_virtual_columns = AdbcScanGetVirtualColumns;
     adbc_scan_function.get_row_id_columns = AdbcScanGetRowIdColumns;
 
+    NameParameters(adbc_scan_function, {"database", "query"});
     CreateTableFunctionInfo info(adbc_scan_function);
     FunctionDescription desc;
     desc.description = "Execute a SELECT query on an attached grainlift database and return the results as a table";
-    desc.parameter_names = {"database", "query", "params", "batch_size"};
-    desc.parameter_types = {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::ANY, LogicalType::BIGINT};
     desc.examples = {"SELECT * FROM grainlift_scan('pg', 'SELECT * FROM users')",
                      "SELECT * FROM grainlift_scan('pg', 'SELECT * FROM users WHERE id = ?', params := row(42))",
                      "SELECT * FROM grainlift_scan('pg', 'SELECT * FROM large_table', batch_size := 65536)"};
@@ -1484,11 +1485,13 @@ void RegisterAdbcTableFunctions(DatabaseInstance &db) {
     TableFunction adbc_scan_table_function("grainlift_scan_table", {LogicalType::VARCHAR, LogicalType::VARCHAR},
                                             AdbcScanTableFunction, AdbcScanTableBind, AdbcScanTableInitGlobal, AdbcScanTableInitLocal);
 
-    // Add named parameters for catalog, schema, and batch size
-    adbc_scan_table_function.named_parameters["columns"] = LogicalType::ANY;
-    adbc_scan_table_function.named_parameters["catalog"] = LogicalType::VARCHAR;
-    adbc_scan_table_function.named_parameters["schema"] = LogicalType::VARCHAR;
-    adbc_scan_table_function.named_parameters["batch_size"] = LogicalType::BIGINT;
+    // Optional named parameters: a call that leaves one out does not pass it.
+    adbc_scan_table_function.GetSignature().WithTypedKwargs("kwargs", [](TypedKwargs &options) {
+        options.Add("columns", LogicalType::ANY);
+        options.Add("catalog", LogicalType::VARCHAR);
+        options.Add("schema", LogicalType::VARCHAR);
+        options.Add("batch_size", LogicalType::BIGINT);
+    });
 
     // Enable projection pushdown and filter pushdown
     adbc_scan_table_function.projection_pushdown = true;
@@ -1504,11 +1507,10 @@ void RegisterAdbcTableFunctions(DatabaseInstance &db) {
     adbc_scan_table_function.get_virtual_columns = AdbcScanGetVirtualColumns;
     adbc_scan_table_function.get_row_id_columns = AdbcScanGetRowIdColumns;
 
+    NameParameters(adbc_scan_table_function, {"database", "table_name"});
     CreateTableFunctionInfo scan_table_info(adbc_scan_table_function);
     FunctionDescription scan_table_desc;
     scan_table_desc.description = "Scan an entire table from an attached grainlift database";
-    scan_table_desc.parameter_names = {"database", "table_name", "catalog", "schema", "batch_size"};
-    scan_table_desc.parameter_types = {LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::VARCHAR, LogicalType::BIGINT};
     scan_table_desc.examples = {"SELECT * FROM grainlift_scan_table('pg', 'users')",
                                 "SELECT * FROM grainlift_scan_table('pg', 'users', schema := 'public')",
                                 "SELECT * FROM grainlift_scan_table('pg', 'large_table', batch_size := 65536)"};

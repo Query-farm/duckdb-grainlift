@@ -48,8 +48,8 @@ public:
 	string GetCatalogType() override {
 		return "grainlift";
 	}
-	string GetDefaultSchema() const override {
-		return default_schema.empty() ? "main" : default_schema;
+	optional<Identifier> GetDefaultSchema() const override {
+		return Identifier(default_schema.empty() ? "main" : default_schema);
 	}
 
 	optional_ptr<CatalogEntry> CreateSchema(CatalogTransaction transaction, CreateSchemaInfo &info) override;

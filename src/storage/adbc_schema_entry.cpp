@@ -50,7 +50,7 @@ optional_ptr<CatalogEntry> AdbcSchemaEntry::CreateTable(CatalogTransaction trans
 	auto &adbc_transaction = GetAdbcTransaction(transaction);
 	auto &base = info.Base();
 	string mode = "adbc.ingest.mode.create";
-	if (auto existing = tables.GetEntry(adbc_transaction, base.table)) {
+	if (auto existing = tables.GetEntry(adbc_transaction, base.GetTableName().GetIdentifierName())) {
 		switch (base.on_conflict) {
 		case OnCreateConflict::IGNORE_ON_CONFLICT:
 			return existing;
@@ -58,7 +58,7 @@ optional_ptr<CatalogEntry> AdbcSchemaEntry::CreateTable(CatalogTransaction trans
 			mode = "adbc.ingest.mode.replace";
 			break;
 		default:
-			throw CatalogException("Table with name \"%s\" already exists!", base.table);
+			throw CatalogException("Table with name \"%s\" already exists!", base.GetTableName().GetIdentifierName());
 		}
 	}
 
@@ -66,7 +66,7 @@ optional_ptr<CatalogEntry> AdbcSchemaEntry::CreateTable(CatalogTransaction trans
 	vector<string> names;
 	for (auto &column : base.columns.Logical()) {
 		types.push_back(column.GetType());
-		names.push_back(column.GetName());
+		names.push_back(column.GetName().GetIdentifierName());
 	}
 	ArrowSchema arrow_schema;
 	auto client_properties = transaction.GetContext().GetClientProperties();
@@ -77,10 +77,10 @@ optional_ptr<CatalogEntry> AdbcSchemaEntry::CreateTable(CatalogTransaction trans
 
 	AdbcStatementWrapper statement(adbc_transaction.GetWriteConnection());
 	statement.Init();
-	statement.SetOption("adbc.ingest.target_table", base.table);
+	statement.SetOption("adbc.ingest.target_table", base.GetTableName().GetIdentifierName());
 	statement.SetOption("adbc.ingest.mode", mode);
 	if (name != DEFAULT_SCHEMA) {
-		statement.SetOption("adbc.ingest.target_db_schema", name);
+		statement.SetOption("adbc.ingest.target_db_schema", name.GetIdentifierName());
 	}
 	statement.BindStream(&empty.stream);
 	statement.ExecuteUpdate();
@@ -162,16 +162,16 @@ void AdbcSchemaEntry::DropEntry(ClientContext &context, DropInfo &info) {
 		throw BinderException("grainlift databases only support dropping tables and views");
 	}
 	auto &adbc_transaction = AdbcTransaction::Get(context, catalog);
-	auto entry = tables.GetEntry(adbc_transaction, info.name);
+	auto entry = tables.GetEntry(adbc_transaction, info.GetQualifiedName().Name().GetIdentifierName());
 	if (!entry) {
 		if (info.if_not_found == OnEntryNotFound::RETURN_NULL) {
 			return;
 		}
-		throw CatalogException("Table with name \"%s\" does not exist!", info.name);
+		throw CatalogException("Table with name \"%s\" does not exist!", info.GetQualifiedName().Name().GetIdentifierName());
 	}
 	auto connection = adbc_transaction.GetWriteConnection();
 	auto sql = string(info.type == CatalogType::VIEW_ENTRY ? "DROP VIEW " : "DROP TABLE ") +
-	           QualifiedName(name, entry->name, IdentifierQuoteForDriver(connection->GetDriverName()));
+	           QualifiedName(name.GetIdentifierName(), entry->name.GetIdentifierName(), IdentifierQuoteForDriver(connection->GetDriverName()));
 	if (info.cascade) {
 		sql += " CASCADE";
 	}

@@ -58,7 +58,7 @@ struct AdbcInfoGlobalState : public GlobalTableFunctionState {
 };
 
 static unique_ptr<FunctionData> AdbcInfoBind(ClientContext &context, TableFunctionBindInput &input,
-                                              vector<LogicalType> &return_types, vector<string> &names) {
+                                              vector<LogicalType> &return_types, vector<Identifier> &names) {
     auto bind_data = make_uniq<AdbcInfoBindData>();
 
     // Check for NULL database name
@@ -313,7 +313,7 @@ static void ExtractTables(ArrowArray *batch, vector<TableRow> &table_rows) {
 }
 
 static unique_ptr<FunctionData> AdbcTablesBind(ClientContext &context, TableFunctionBindInput &input,
-                                                vector<LogicalType> &return_types, vector<string> &names) {
+                                                vector<LogicalType> &return_types, vector<Identifier> &names) {
     auto bind_data = make_uniq<AdbcTablesBindData>();
 
     // Check for NULL database name
@@ -439,7 +439,7 @@ struct AdbcTableTypesGlobalState : public GlobalTableFunctionState {
 };
 
 static unique_ptr<FunctionData> AdbcTableTypesBind(ClientContext &context, TableFunctionBindInput &input,
-                                                    vector<LogicalType> &return_types, vector<string> &names) {
+                                                    vector<LogicalType> &return_types, vector<Identifier> &names) {
     auto bind_data = make_uniq<AdbcTableTypesBindData>();
 
     // Check for NULL database name
@@ -723,7 +723,7 @@ static void ExtractColumns(ArrowArray *batch, vector<ColumnRow> &column_rows) {
 }
 
 static unique_ptr<FunctionData> AdbcColumnsBind(ClientContext &context, TableFunctionBindInput &input,
-                                                 vector<LogicalType> &return_types, vector<string> &names) {
+                                                 vector<LogicalType> &return_types, vector<Identifier> &names) {
     auto bind_data = make_uniq<AdbcColumnsBindData>();
 
     // Check for NULL database name
@@ -891,7 +891,7 @@ static void ExtractSchemaFields(ClientContext &context, ArrowSchema *schema, vec
 }
 
 static unique_ptr<FunctionData> AdbcSchemaBind(ClientContext &context, TableFunctionBindInput &input,
-                                                vector<LogicalType> &return_types, vector<string> &names) {
+                                                vector<LogicalType> &return_types, vector<Identifier> &names) {
     auto bind_data = make_uniq<AdbcSchemaBindData>();
 
     // Check for NULL database name
@@ -1001,6 +1001,7 @@ void RegisterAdbcCatalogFunctions(DatabaseInstance &db) {
         TableFunction adbc_info_function("grainlift_info", {LogicalType::VARCHAR}, AdbcInfoFunction,
                                           AdbcInfoBind, AdbcInfoInitGlobal, AdbcInfoInitLocal);
         adbc_info_function.projection_pushdown = false;
+        NameParameters(adbc_info_function, {"database"});
         CreateTableFunctionInfo info(adbc_info_function);
         FunctionDescription desc;
         desc.description = "Get driver and database information from an attached grainlift database";
@@ -1016,10 +1017,14 @@ void RegisterAdbcCatalogFunctions(DatabaseInstance &db) {
     {
         TableFunction adbc_tables_function("grainlift_tables", {LogicalType::VARCHAR}, AdbcTablesFunction,
                                             AdbcTablesBind, AdbcTablesInitGlobal, AdbcTablesInitLocal);
-        adbc_tables_function.named_parameters["catalog"] = LogicalType::VARCHAR;
-        adbc_tables_function.named_parameters["schema"] = LogicalType::VARCHAR;
-        adbc_tables_function.named_parameters["table_name"] = LogicalType::VARCHAR;
+        // Optional named parameters: a call that leaves one out does not pass it.
+        adbc_tables_function.GetSignature().WithTypedKwargs("kwargs", [](TypedKwargs &options) {
+            options.Add("catalog", LogicalType::VARCHAR);
+            options.Add("schema", LogicalType::VARCHAR);
+            options.Add("table_name", LogicalType::VARCHAR);
+        });
         adbc_tables_function.projection_pushdown = false;
+        NameParameters(adbc_tables_function, {"database"});
         CreateTableFunctionInfo info(adbc_tables_function);
         FunctionDescription desc;
         desc.description = "Get list of tables from an ADBC data source";
@@ -1038,6 +1043,7 @@ void RegisterAdbcCatalogFunctions(DatabaseInstance &db) {
         TableFunction adbc_table_types_function("grainlift_table_types", {LogicalType::VARCHAR}, AdbcTableTypesFunction,
                                                  AdbcTableTypesBind, AdbcTableTypesInitGlobal, AdbcTableTypesInitLocal);
         adbc_table_types_function.projection_pushdown = false;
+        NameParameters(adbc_table_types_function, {"database"});
         CreateTableFunctionInfo info(adbc_table_types_function);
         FunctionDescription desc;
         desc.description = "Get supported table types from an ADBC data source (e.g., 'table', 'view')";
@@ -1053,11 +1059,15 @@ void RegisterAdbcCatalogFunctions(DatabaseInstance &db) {
     {
         TableFunction adbc_columns_function("grainlift_columns", {LogicalType::VARCHAR}, AdbcColumnsFunction,
                                              AdbcColumnsBind, AdbcColumnsInitGlobal, AdbcColumnsInitLocal);
-        adbc_columns_function.named_parameters["catalog"] = LogicalType::VARCHAR;
-        adbc_columns_function.named_parameters["schema"] = LogicalType::VARCHAR;
-        adbc_columns_function.named_parameters["table_name"] = LogicalType::VARCHAR;
-        adbc_columns_function.named_parameters["column_name"] = LogicalType::VARCHAR;
+        // Optional named parameters: a call that leaves one out does not pass it.
+        adbc_columns_function.GetSignature().WithTypedKwargs("kwargs", [](TypedKwargs &options) {
+            options.Add("catalog", LogicalType::VARCHAR);
+            options.Add("schema", LogicalType::VARCHAR);
+            options.Add("table_name", LogicalType::VARCHAR);
+            options.Add("column_name", LogicalType::VARCHAR);
+        });
         adbc_columns_function.projection_pushdown = false;
+        NameParameters(adbc_columns_function, {"database"});
         CreateTableFunctionInfo info(adbc_columns_function);
         FunctionDescription desc;
         desc.description = "Get column metadata for tables in an ADBC data source";
@@ -1075,9 +1085,13 @@ void RegisterAdbcCatalogFunctions(DatabaseInstance &db) {
     {
         TableFunction adbc_schema_function("grainlift_schema", {LogicalType::VARCHAR, LogicalType::VARCHAR}, AdbcSchemaFunction,
                                             AdbcSchemaBind, AdbcSchemaInitGlobal, AdbcSchemaInitLocal);
-        adbc_schema_function.named_parameters["catalog"] = LogicalType::VARCHAR;
-        adbc_schema_function.named_parameters["schema"] = LogicalType::VARCHAR;
+        // Optional named parameters: a call that leaves one out does not pass it.
+        adbc_schema_function.GetSignature().WithTypedKwargs("kwargs", [](TypedKwargs &options) {
+            options.Add("catalog", LogicalType::VARCHAR);
+            options.Add("schema", LogicalType::VARCHAR);
+        });
         adbc_schema_function.projection_pushdown = false;
+        NameParameters(adbc_schema_function, {"database", "table_name"});
         CreateTableFunctionInfo info(adbc_schema_function);
         FunctionDescription desc;
         desc.description = "Get the Arrow schema for a specific table in an ADBC data source";

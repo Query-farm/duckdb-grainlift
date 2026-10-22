@@ -15,7 +15,7 @@ struct AdbcExecuteState : public GlobalTableFunctionState {
 };
 
 static unique_ptr<FunctionData> AdbcExecuteBind(ClientContext &, TableFunctionBindInput &input,
-                                              vector<LogicalType> &types, vector<string> &names) {
+                                              vector<LogicalType> &types, vector<Identifier> &names) {
     if (input.inputs[0].IsNull()) {
         throw InvalidInputException("grainlift_execute: database name cannot be NULL");
     }
@@ -56,6 +56,7 @@ void RegisterAdbcExecuteFunction(DatabaseInstance &db) {
     ExtensionLoader loader(db, "grainlift");
     TableFunction function("grainlift_execute", {LogicalType::VARCHAR, LogicalType::VARCHAR},
                            AdbcExecute, AdbcExecuteBind, AdbcExecuteInit);
+    NameParameters(function, {"database", "query"});
     CreateTableFunctionInfo info(function);
     FunctionDescription description;
     description.description = "Execute a remote command at runtime; return NULL when the affected-row count is unknown";

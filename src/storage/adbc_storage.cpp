@@ -89,7 +89,7 @@ static unique_ptr<Catalog> AdbcAttach(optional_ptr<StorageExtensionInfo> storage
 }
 
 static unique_ptr<TransactionManager> AdbcCreateTransactionManager(optional_ptr<StorageExtensionInfo> storage_info,
-                                                                    AttachedDatabase &db, Catalog &catalog) {
+                                                                   AttachedDatabase &db, Catalog &catalog) {
 	auto &adbc_catalog = catalog.Cast<AdbcCatalog>();
 	return make_uniq<AdbcTransactionManager>(db, adbc_catalog);
 }

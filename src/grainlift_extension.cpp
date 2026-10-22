@@ -10,7 +10,7 @@
 #include "duckdb/main/config.hpp"
 #include "duckdb/optimizer/optimizer_extension.hpp"
 #include "duckdb/parser/parsed_data/attach_info.hpp"
-#include "duckdb/planner/operator/logical_simple.hpp"
+#include "duckdb/planner/operator/logical_attach.hpp"
 #include "grainlift_host.h"
 
 #ifndef GRAINLIFT_EXTENSION_VERSION
@@ -29,11 +29,11 @@ static void PrepareAttachEndpoint(OptimizerExtensionInput &, unique_ptr<LogicalO
 	if (!plan || plan->type != LogicalOperatorType::LOGICAL_ATTACH) {
 		return;
 	}
-	auto &simple = plan->Cast<LogicalSimple>();
-	if (!simple.info || simple.info->info_type != ParseInfoType::ATTACH_INFO) {
+	auto &attach = plan->Cast<LogicalAttach>();
+	if (!attach.info) {
 		return;
 	}
-	auto &path = simple.info->Cast<AttachInfo>().path;
+	auto &path = attach.info->path;
 	if (StringUtil::Contains(StringUtil::Lower(path), "iroh://")) {
 		grainlift_prepare_endpoint(path.c_str());
 	}

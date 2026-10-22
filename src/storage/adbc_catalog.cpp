@@ -35,7 +35,7 @@ optional_ptr<CatalogEntry> AdbcCatalog::CreateSchema(CatalogTransaction transact
 	auto &adbc_transaction = AdbcTransaction::Get(transaction.GetContext(), *this);
 
 	// Check if schema already exists
-	auto existing = schemas.GetEntry(adbc_transaction, info.schema);
+	auto existing = schemas.GetEntry(adbc_transaction, info.SchemaName().GetIdentifierName());
 	if (existing) {
 		switch (info.on_conflict) {
 		case OnCreateConflict::REPLACE_ON_CONFLICT:
@@ -45,7 +45,7 @@ optional_ptr<CatalogEntry> AdbcCatalog::CreateSchema(CatalogTransaction transact
 			return nullptr;
 		case OnCreateConflict::ERROR_ON_CONFLICT:
 		default:
-			throw BinderException("Schema with name \"%s\" already exists", info.schema);
+			throw BinderException("Schema with name \"%s\" already exists", info.SchemaName().GetIdentifierName());
 		}
 	}
 

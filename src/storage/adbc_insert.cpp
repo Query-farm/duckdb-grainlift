@@ -8,6 +8,7 @@
 #include "duckdb/planner/parsed_data/bound_create_table_info.hpp"
 #include "duckdb/common/arrow/arrow_converter.hpp"
 #include "duckdb/common/arrow/arrow_appender.hpp"
+#include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
 #include <nanoarrow/nanoarrow.h>
 #include <atomic>
 
@@ -72,8 +73,8 @@ unique_ptr<GlobalSinkState> AdbcInsert::GetGlobalSinkState(ClientContext &contex
 	if (table) {
 		// INSERT INTO existing table
 		auto &adbc_table = table->Cast<AdbcTableEntry>();
-		target_table = adbc_table.name;
-		target_schema = adbc_table.schema.name;
+		target_table = adbc_table.name.GetIdentifierName();
+		target_schema = adbc_table.schema.name.GetIdentifierName();
 		ingest_mode = "adbc.ingest.mode.append";
 
 		auto &catalog = adbc_table.catalog.Cast<AdbcCatalog>();
@@ -86,15 +87,15 @@ unique_ptr<GlobalSinkState> AdbcInsert::GetGlobalSinkState(ClientContext &contex
 		for (idx_t i = 0; i < columns.LogicalColumnCount(); i++) {
 			auto &col = columns.GetColumn(LogicalIndex(i));
 			state->column_types.push_back(col.GetType());
-			state->column_names.push_back(col.GetName());
+			state->column_names.push_back(col.GetName().GetIdentifierName());
 		}
 	} else {
 		// CREATE TABLE AS
 		auto &schema_ref = schema->Cast<AdbcSchemaEntry>();
 		auto &catalog = const_cast<AdbcCatalog &>(schema_ref.ParentCatalog().Cast<AdbcCatalog>());
 		connection = AdbcTransaction::Get(context, catalog).GetWriteConnection();
-		target_table = info->Base().table;
-		target_schema = schema_ref.name;
+		target_schema = schema_ref.name.GetIdentifierName();
+		target_table = info->Base().GetTableName().GetIdentifierName();
 		ingest_mode = "adbc.ingest.mode.create";
 		auto &table_set = const_cast<AdbcSchemaEntry &>(schema_ref).GetTableSet();
 		if (table_set.GetEntry(AdbcTransaction::Get(context, catalog), target_table)) {
@@ -113,7 +114,7 @@ unique_ptr<GlobalSinkState> AdbcInsert::GetGlobalSinkState(ClientContext &contex
 		// Get types from the bound create info
 		for (auto &col : info->Base().columns.Logical()) {
 			state->column_types.push_back(col.GetType());
-			state->column_names.push_back(col.GetName());
+			state->column_names.push_back(col.GetName().GetIdentifierName());
 		}
 	}
 
@@ -223,7 +224,8 @@ string AdbcInsert::GetName() const {
 
 InsertionOrderPreservingMap<string> AdbcInsert::ParamsToString() const {
 	InsertionOrderPreservingMap<string> result;
-	result["Table Name"] = table ? table->name : info->Base().table;
+	result["Table Name"] = table ? table->name.GetIdentifierName()
+	                             : info->Base().GetTableName().GetIdentifierName();
 	return result;
 }
 

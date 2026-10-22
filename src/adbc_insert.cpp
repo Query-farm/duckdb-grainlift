@@ -3,6 +3,7 @@
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/common/arrow/arrow_converter.hpp"
 #include "duckdb/common/arrow/arrow_appender.hpp"
+#include "duckdb/function/table/arrow/arrow_duck_schema.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
 
@@ -112,7 +113,7 @@ struct AdbcInsertGlobalState : public GlobalTableFunctionState {
 };
 
 static unique_ptr<FunctionData> AdbcInsertBind(ClientContext &context, TableFunctionBindInput &input,
-                                                vector<LogicalType> &return_types, vector<string> &names) {
+                                                vector<LogicalType> &return_types, vector<Identifier> &names) {
     (void)context;
     auto bind_data = make_uniq<AdbcInsertBindData>();
 
@@ -162,7 +163,7 @@ static unique_ptr<FunctionData> AdbcInsertBind(ClientContext &context, TableFunc
 
     // Store input table types and names for Arrow conversion
     bind_data->input_types = input.input_table_types;
-    bind_data->input_names = input.input_table_names;
+    bind_data->input_names = IdentifiersToStrings(input.input_table_names);
 
     // Return schema: rows_inserted (BIGINT)
     return_types = {LogicalType::BIGINT};
@@ -288,12 +289,16 @@ void RegisterAdbcInsertFunction(DatabaseInstance &db) {
                                         AdbcInsertInitGlobal);
     adbc_insert_function.in_out_function = AdbcInsertInOut;
     adbc_insert_function.in_out_function_final = AdbcInsertFinalize;
-    adbc_insert_function.named_parameters["mode"] = LogicalType::VARCHAR;
-    // Optional bounded-queue depth override (default 32 / ADBC_INSERT_MAX_PENDING_BATCHES).
-    adbc_insert_function.named_parameters["max_batches"] = LogicalType::BIGINT;
-    // Driver-specific statement options as a STRUCT or MAP of key/value pairs.
-    adbc_insert_function.named_parameters["options"] = LogicalType::ANY;
+    // Optional named parameters: a call that leaves one out does not pass it.
+    adbc_insert_function.GetSignature().WithTypedKwargs("kwargs", [](TypedKwargs &options) {
+        options.Add("mode", LogicalType::VARCHAR);
+        // Optional bounded-queue depth override (default 32 / ADBC_INSERT_MAX_PENDING_BATCHES).
+        options.Add("max_batches", LogicalType::BIGINT);
+        // Driver-specific statement options as a STRUCT or MAP of key/value pairs.
+        options.Add("options", LogicalType::ANY);
+    });
 
+    NameParameters(adbc_insert_function, {"database", "table_name", "data"});
     CreateTableFunctionInfo info(adbc_insert_function);
     FunctionDescription desc;
     desc.description = "Bulk insert data from a query into an ADBC table";
