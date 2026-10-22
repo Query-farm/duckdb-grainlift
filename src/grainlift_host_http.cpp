@@ -8,6 +8,7 @@
 
 #include "duckdb/common/http_util.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 
 #include <cstring>
@@ -16,6 +17,8 @@ namespace adbc_scanner {
 using namespace duckdb;
 
 namespace {
+
+thread_local ClientContext *current_query = nullptr;
 
 // Owns everything a GrainliftHttpResponse points at.
 struct HostResponse {
@@ -57,7 +60,11 @@ int32_t Execute(void *host_ctx, const GrainliftHttpRequest *request, GrainliftHt
 		string url(request->url);
 
 		auto &http_util = HTTPUtil::Get(*instance);
-		auto params = http_util.InitializeParameters(*instance, url);
+		// The query's own parameters carry its interrupt; another database's
+		// query (or none) falls back to the database's parameters.
+		auto query = GrainliftQueryScope::Current();
+		auto params = query && query->db.get() == instance ? http_util.InitializeParameters(*query, url)
+		                                                   : http_util.InitializeParameters(*instance, url);
 		// Closing sessions is best effort: an unreachable gateway must not stall
 		// DuckDB's exit for the full request timeout.
 		SetTimeout(*params, shutting_down ? std::min<uint32_t>(request->timeout_ms, 2000) : request->timeout_ms);
@@ -164,6 +171,18 @@ void Release(GrainliftHttpResponse *response) {
 }
 
 } // namespace
+
+GrainliftQueryScope::GrainliftQueryScope(ClientContext &context) : previous(current_query) {
+	current_query = &context;
+}
+
+GrainliftQueryScope::~GrainliftQueryScope() {
+	current_query = previous.get();
+}
+
+optional_ptr<ClientContext> GrainliftQueryScope::Current() {
+	return current_query;
+}
 
 void RegisterGrainliftHostHttp() {
 	// DuckDB's HTTP layer has no OPTIONS request type. Compression is

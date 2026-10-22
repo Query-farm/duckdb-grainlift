@@ -1,4 +1,5 @@
 #include "storage/adbc_insert.hpp"
+#include "grainlift_host_http.hpp"
 #include "storage/adbc_catalog.hpp"
 #include "storage/adbc_transaction.hpp"
 #include "storage/adbc_table_entry.hpp"
@@ -61,6 +62,7 @@ public:
 };
 
 unique_ptr<GlobalSinkState> AdbcInsert::GetGlobalSinkState(ClientContext &context) const {
+	GrainliftQueryScope query_scope(context);
 	auto state = make_uniq<AdbcStorageInsertGlobalState>();
 	state->client_properties = context.GetClientProperties();
 
@@ -153,6 +155,7 @@ unique_ptr<GlobalSinkState> AdbcInsert::GetGlobalSinkState(ClientContext &contex
 // ============================================================================
 
 SinkResultType AdbcInsert::Sink(ExecutionContext &context, DataChunk &chunk, OperatorSinkInput &input) const {
+	GrainliftQueryScope query_scope(context.client);
 	auto &state = input.global_state.Cast<AdbcStorageInsertGlobalState>();
 
 	if (state.skip || chunk.size() == 0) {
@@ -184,6 +187,7 @@ SinkResultType AdbcInsert::Sink(ExecutionContext &context, DataChunk &chunk, Ope
 
 SinkFinalizeType AdbcInsert::Finalize(Pipeline &pipeline, Event &event, ClientContext &context,
                                       OperatorSinkFinalizeInput &input) const {
+	GrainliftQueryScope query_scope(context);
 	auto &state = input.global_state.Cast<AdbcStorageInsertGlobalState>();
 	if (state.skip) {
 		return SinkFinalizeType::READY;

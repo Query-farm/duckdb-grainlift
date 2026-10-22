@@ -1,4 +1,5 @@
 #include "adbc_connection.hpp"
+#include "grainlift_host_http.hpp"
 #include "adbc_filter_pushdown.hpp"
 #include "adbc_arrow_types.hpp"
 #include "duckdb/function/table_function.hpp"
@@ -524,6 +525,7 @@ static void BindParameters(ClientContext &context, AdbcStatementWrapper &stateme
 // Bind function - validates inputs and gets schema
 static unique_ptr<FunctionData> AdbcScanBind(ClientContext &context, TableFunctionBindInput &input,
                                               vector<LogicalType> &return_types, vector<Identifier> &names) {
+    GrainliftQueryScope query_scope(context);
     auto bind_data = make_uniq<AdbcScanBindData>();
 
     // Check for NULL database name first
@@ -605,6 +607,7 @@ static unique_ptr<FunctionData> AdbcScanBind(ClientContext &context, TableFuncti
 
 // Global init - create and execute the prepared statement
 static unique_ptr<GlobalTableFunctionState> AdbcScanInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = input.bind_data->Cast<AdbcScanBindData>();
     auto global_state = make_uniq<AdbcScanGlobalState>();
 
@@ -754,6 +757,7 @@ static bool GetNextBatch(AdbcScanGlobalState &global_state, AdbcScanLocalState &
 
 // Main scan function - converts Arrow data to DuckDB
 static void AdbcScanFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = data.bind_data->Cast<AdbcScanBindData>();
     auto &global_state = data.global_state->Cast<AdbcScanGlobalState>();
     auto &local_state = data.local_state->Cast<AdbcScanLocalState>();
@@ -886,6 +890,7 @@ static string BuildQualifiedTableName(const string &catalog, const string &schem
 unique_ptr<FunctionData> AdbcScanTableBindWithConnection(ClientContext &context, TableFunctionBindInput &input,
                                                          shared_ptr<AdbcConnectionWrapper> connection,
                                                          vector<LogicalType> &return_types, vector<Identifier> &names) {
+    GrainliftQueryScope query_scope(context);
     auto bind_data = make_uniq<AdbcScanBindData>();
 
     // Check for NULL database name first
@@ -962,6 +967,7 @@ static unique_ptr<FunctionData> AdbcScanTableBind(ClientContext &context, TableF
 
 // Global init for grainlift_scan_table - builds projected query based on column_ids and filters
 static unique_ptr<GlobalTableFunctionState> AdbcScanTableInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = input.bind_data->Cast<AdbcScanBindData>();
     auto global_state = make_uniq<AdbcScanGlobalState>();
 
@@ -1139,6 +1145,7 @@ static unique_ptr<LocalTableFunctionState> AdbcScanTableInitLocal(ExecutionConte
 
 // Scan function for grainlift_scan_table - uses projected schema when available
 static void AdbcScanTableFunction(ClientContext &context, TableFunctionInput &data, DataChunk &output) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = data.bind_data->Cast<AdbcScanBindData>();
     auto &global_state = data.global_state->Cast<AdbcScanGlobalState>();
     auto &local_state = data.local_state->Cast<AdbcScanLocalState>();

@@ -1,4 +1,5 @@
 #include "adbc_connection.hpp"
+#include "grainlift_host_http.hpp"
 #include "adbc_arrow_types.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
@@ -121,6 +122,7 @@ static string ExtractUnionValue(ArrowArray *union_array, int64_t row_idx) {
 }
 
 static unique_ptr<GlobalTableFunctionState> AdbcInfoInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = input.bind_data->Cast<AdbcInfoBindData>();
     auto global_state = make_uniq<AdbcInfoGlobalState>();
 
@@ -352,6 +354,7 @@ static unique_ptr<FunctionData> AdbcTablesBind(ClientContext &context, TableFunc
 }
 
 static unique_ptr<GlobalTableFunctionState> AdbcTablesInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = input.bind_data->Cast<AdbcTablesBindData>();
     auto global_state = make_uniq<AdbcTablesGlobalState>();
 
@@ -458,6 +461,7 @@ static unique_ptr<FunctionData> AdbcTableTypesBind(ClientContext &context, Table
 }
 
 static unique_ptr<GlobalTableFunctionState> AdbcTableTypesInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = input.bind_data->Cast<AdbcTableTypesBindData>();
     auto global_state = make_uniq<AdbcTableTypesGlobalState>();
 
@@ -769,6 +773,7 @@ static unique_ptr<FunctionData> AdbcColumnsBind(ClientContext &context, TableFun
 }
 
 static unique_ptr<GlobalTableFunctionState> AdbcColumnsInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = input.bind_data->Cast<AdbcColumnsBindData>();
     auto global_state = make_uniq<AdbcColumnsGlobalState>();
 
@@ -931,6 +936,7 @@ static unique_ptr<FunctionData> AdbcSchemaBind(ClientContext &context, TableFunc
 }
 
 static unique_ptr<GlobalTableFunctionState> AdbcSchemaInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = input.bind_data->Cast<AdbcSchemaBindData>();
     auto global_state = make_uniq<AdbcSchemaGlobalState>();
 

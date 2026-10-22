@@ -1,4 +1,5 @@
 #include "adbc_insert_stream.hpp"
+#include "grainlift_host_http.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/common/arrow/arrow_converter.hpp"
@@ -173,6 +174,7 @@ static unique_ptr<FunctionData> AdbcInsertBind(ClientContext &context, TableFunc
 }
 
 static unique_ptr<GlobalTableFunctionState> AdbcInsertInitGlobal(ClientContext &context, TableFunctionInitInput &input) {
+    GrainliftQueryScope query_scope(context);
     auto &bind_data = input.bind_data->Cast<AdbcInsertBindData>();
     auto global_state = make_uniq<AdbcInsertGlobalState>();
 
@@ -219,6 +221,7 @@ static unique_ptr<GlobalTableFunctionState> AdbcInsertInitGlobal(ClientContext &
 
 static OperatorResultType AdbcInsertInOut(ExecutionContext &context, TableFunctionInput &data_p,
                                            DataChunk &input, DataChunk &output) {
+    GrainliftQueryScope query_scope(context.client);
     auto &bind_data = data_p.bind_data->Cast<AdbcInsertBindData>();
     auto &global_state = data_p.global_state->Cast<AdbcInsertGlobalState>();
     lock_guard<mutex> l(global_state.lock);
@@ -253,7 +256,7 @@ static OperatorResultType AdbcInsertInOut(ExecutionContext &context, TableFuncti
 
 static OperatorFinalizeResultType AdbcInsertFinalize(ExecutionContext &context, TableFunctionInput &data_p,
                                                       DataChunk &output) {
-    (void)context;
+    GrainliftQueryScope query_scope(context.client);
     auto &global_state = data_p.global_state->Cast<AdbcInsertGlobalState>();
     lock_guard<mutex> l(global_state.lock);
 

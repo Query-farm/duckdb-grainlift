@@ -1,4 +1,5 @@
 #include "storage/adbc_storage.hpp"
+#include "grainlift_host_http.hpp"
 #include "storage/adbc_catalog.hpp"
 #include "storage/adbc_transaction_manager.hpp"
 #include "adbc_connection.hpp"
@@ -19,6 +20,7 @@ using namespace duckdb;
 static unique_ptr<Catalog> AdbcAttach(optional_ptr<StorageExtensionInfo> storage_info, ClientContext &context,
                                       AttachedDatabase &db, const string &name, AttachInfo &info,
                                       AttachOptions &attach_options) {
+	GrainliftQueryScope query_scope(context);
 	// Parse the connection options from the attach info
 	// Format: ATTACH 'grainlift+https://host/prefix' AS name (TYPE grainlift, TARGET 'name')
 

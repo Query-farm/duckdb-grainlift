@@ -1,4 +1,5 @@
 #include "adbc_connection.hpp"
+#include "grainlift_host_http.hpp"
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
 
@@ -35,6 +36,7 @@ static unique_ptr<GlobalTableFunctionState> AdbcExecuteInit(ClientContext &, Tab
 }
 
 static void AdbcExecute(ClientContext &context, TableFunctionInput &input, DataChunk &output) {
+    GrainliftQueryScope query_scope(context);
     auto &state = input.global_state->Cast<AdbcExecuteState>();
     if (state.finished) {
         return;
