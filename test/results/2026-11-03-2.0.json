@@ -15,6 +15,13 @@
     "sql_assertions_passed": 1127,
     "sql_tests_skipped": 0,
     "backends": ["sqlite", "postgresql"],
+    "published_smoke": {
+      "release_run": "https://github.com/Query-farm/duckdb-grainlift/actions/runs/41701561441",
+      "repository": "query_farm",
+      "signature_verification": true,
+      "python_package": "duckdb==2.0.0",
+      "passed": true
+    },
     "ci_artifact_smoke": {
       "build_run": "https://github.com/Query-farm/duckdb-grainlift/actions/runs/41675272004",
       "artifact": "main-extensions-osx_arm64",

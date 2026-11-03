@@ -190,6 +190,8 @@ macOS artifact from the distribution workflow also passed
 `test/python/release_smoke.py` with the released `duckdb==2.0.0` Python package.
 After publication, `test/python/release_smoke.py --published` downloads the
 Query.Farm extension and runs the same gateway checks with signature verification.
+This check passed for the signed macOS ARM64 artifact published by the
+[2.0 release workflow](https://github.com/Query-farm/duckdb-grainlift/actions/runs/41701561441).
 
 The same validation also built both WASM flavors with Emscripten 6.0.13 and
 tested them in Chromium against `@haybarn/haybarn-wasm@2.0.0-rc11`: HTTP passed
