@@ -39,7 +39,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          submodules: recursive
+          persist-credentials: false
+      - name: Fetch the gateway sources
+        run: git submodule update --init --depth 1 -- grainlift
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249
         with:
           toolchain: 1.97.1
@@ -48,15 +50,17 @@ jobs:
           workspaces: grainlift
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
       - uses: columnar-tech/setup-dbc@ef4bdac93f5792831ebebe3fa2d848a040558caa
+        with:
+          version: v0.3.0
+          drivers: sqlite=1.12.0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: '*extensions*linux_amd64'
           path: artifacts
           merge-multiple: true
-      - name: Build gateway and install SQLite
+      - name: Build gateway
         run: |
           cargo build --locked --manifest-path grainlift/Cargo.toml -p grainlift-server
-          dbc install sqlite --level user
       - name: Test released DuckDB against a real gateway
         env:
           GRAINLIFT_SERVER_BIN: ${{ github.workspace }}/grainlift/target/debug/grainlift-server

@@ -14,7 +14,7 @@ grainlift service over Iroh through the page's Iroh adapter Worker.
 
 The `v2.0` branch targets DuckDB 2.0.0 and Haybarn 2.0.0-rc11. The extension
 version is 0.6.1; its version is independent of the engine version. Native
-Linux and macOS builds are signed and published to Query.Farm:
+Linux x86-64/ARM64 and macOS ARM64 builds are signed and published to Query.Farm:
 
 ```sql
 INSTALL grainlift FROM query_farm;
@@ -175,10 +175,18 @@ legacy exception-handling import remains.
 scripts/test-server.sh 8484 http://127.0.0.1:8080
 
 GRAINLIFT_URI=grainlift+http://127.0.0.1:8484 GRAINLIFT_TOKEN=grainlift-test-token GRAINLIFT_PG=1 \
-  ./build/release/test/unittest --test-config test/configs/grainlift.json "test/sql/*"
+  ./build/release/test/unittest --test-config test/configs/grainlift.json "*grainlift*"
 ```
 
 `test/sql/grainlift_postgres.test` needs `GRAINLIFT_PG=1` (skipped otherwise).
+Place the engine's `httpfs.duckdb_extension` beside Grainlift in
+`build/release/repository/v2.0.0/<platform>/` when running the SQL suite without
+building httpfs. The secret-boundary test requires no gateway or httpfs.
+
+On 2026-11-03, the DuckDB 2.0.0 macOS ARM64 build passed all 18 SQL test
+cases (1,127 assertions) against real SQLite and PostgreSQL targets. The
+macOS artifact from the distribution workflow also passed
+`test/python/release_smoke.py` with the released `duckdb==2.0.0` Python package.
 
 Browser: `browser-test/` is a small page on the published `@haybarn/haybarn-wasm`
 bundle. `npm install && npm run build`, copy the built `.wasm` files to
@@ -247,3 +255,11 @@ the tested extension commit, then dispatch its `build.yml` with
 `extension_name=grainlift`, `duckdb_version=haybarn-v2.0.0-rc11`, and
 `deploy=true`. The engine submodule and browser npm dependency must match that
 release exactly. Keep the registry's `variegata` reference for older engines.
+
+After publication, run `test/python/browser_release_smoke.py` with Playwright
+against the local browser page and test gateway. It installs from the Haybarn
+community repository with signature verification enabled and checks both WASM
+flavors. `--identity-only` reports the browser test principal for an Iroh run;
+after authorizing that principal, pass `--iroh-server <endpoint-id>` to exercise
+the threaded build over Iroh. The deterministic default key is for this local
+test fixture only.

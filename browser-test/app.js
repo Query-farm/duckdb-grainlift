@@ -53,7 +53,8 @@ if (coi) {
 }
 const db = new duckdb.AsyncDuckDB(new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING), worker);
 await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-await db.open({ allowUnsignedExtensions: true });
+// Published-artifact checks use the engine's normal signature verification.
+await db.open({ allowUnsignedExtensions: params.get('signed') !== '1' });
 const conn = await db.connect();
 log(`engine ${await db.getVersion()} bundle=${coi ? 'coi (wasm_threads)' : 'eh'} crossOriginIsolated=${self.crossOriginIsolated}`);
 
