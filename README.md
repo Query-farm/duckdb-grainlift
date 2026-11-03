@@ -17,8 +17,9 @@ version is 0.6.1; its version is independent of the engine version. Native
 Linux x86-64/ARM64 and macOS ARM64 builds are signed and published to Query.Farm:
 
 ```sql
+SET allow_extension_repositories = 'allowed';
 INSTALL grainlift FROM query_farm;
-LOAD grainlift;
+LOAD grainlift FROM query_farm;
 ```
 
 Haybarn's `wasm_threads` and `wasm_eh` builds are published through the Haybarn
@@ -74,7 +75,7 @@ ATTACH options (also usable in `CREATE SECRET (TYPE grainlift, ...)`):
 
 ### HTTP request costs
 
-Versions 0.6.x embed the Grainlift 0.5 driver and require a protocol 0.5
+Versions 0.6.x embed the Grainlift driver and require a protocol 0.5
 gateway. HTTP capabilities arrive with `open_connection`; the driver makes no
 `/health` probe. When the selected backend explicitly declares statistics
 unsupported, metadata planning returns `NOT_IMPLEMENTED` locally. Table schemas
@@ -187,6 +188,15 @@ On 2026-11-03, the DuckDB 2.0.0 macOS ARM64 build passed all 18 SQL test
 cases (1,127 assertions) against real SQLite and PostgreSQL targets. The
 macOS artifact from the distribution workflow also passed
 `test/python/release_smoke.py` with the released `duckdb==2.0.0` Python package.
+After publication, `test/python/release_smoke.py --published` downloads the
+Query.Farm extension and runs the same gateway checks with signature verification.
+
+The same validation also built both WASM flavors with Emscripten 6.0.13 and
+tested them in Chromium against `@haybarn/haybarn-wasm@2.0.0-rc11`: HTTP passed
+on `wasm_eh` and `wasm_threads`, and Iroh passed on `wasm_threads`, including
+parameterized queries, ingestion and rollback. These used unsigned local
+artifacts; signed registry publication is a separate release step. The build
+pins and results are recorded in [the validation record](test/results/2026-11-03-2.0.json).
 
 Browser: `browser-test/` is a small page on the published `@haybarn/haybarn-wasm`
 bundle. `npm install && npm run build`, copy the built `.wasm` files to

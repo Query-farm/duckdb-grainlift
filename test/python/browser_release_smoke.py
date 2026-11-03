@@ -7,7 +7,7 @@ to the test principal and pass --iroh-server and --iroh-key on the next run.
 
 import argparse
 import json
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urljoin
 
 from playwright.sync_api import sync_playwright
 
@@ -19,6 +19,11 @@ def main():
     parser.add_argument("--iroh-server")
     parser.add_argument("--iroh-key", default="01" * 32)
     parser.add_argument("--identity-only", action="store_true")
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Test unsigned artifacts from the page's /repo directory",
+    )
     args = parser.parse_args()
     results = []
     with sync_playwright() as playwright:
@@ -35,7 +40,7 @@ def main():
                 page.on("pageerror", lambda error: page_errors.append(str(error)))
                 params = {
                     "autoload": "0",
-                    "signed": "1",
+                    "signed": "0" if args.local else "1",
                     "bundle": bundle,
                     "irohKey": args.iroh_key,
                 }
@@ -56,7 +61,11 @@ def main():
                     return result["rows"]
 
                 assert query("SELECT version() AS version")[0]["version"] == "v2.0.0"
-                query("INSTALL grainlift FROM community")
+                if args.local:
+                    repo = urljoin(args.page, "/repo").replace("'", "''")
+                    query(f"INSTALL grainlift FROM '{repo}'")
+                else:
+                    query("INSTALL grainlift FROM community")
                 query("LOAD grainlift")
                 version = query(
                     "SELECT extension_version FROM duckdb_extensions() WHERE extension_name='grainlift'"
@@ -100,7 +109,7 @@ def main():
                         "bundle": bundle,
                         "transport": "iroh" if args.iroh_server else "http",
                         "extension_version": version,
-                        "signed": True,
+                        "signed": not args.local,
                         "passed": True,
                     }
                 )

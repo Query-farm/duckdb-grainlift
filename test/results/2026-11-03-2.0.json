@@ -1,0 +1,36 @@
+{
+  "date": "2026-11-03",
+  "extension_version": "v0.6.1",
+  "extension_source_ref": "db3c234cd4a6741d584af2a23698cfb805b7cc2c",
+  "grainlift_source_ref": "d8d5119ed71f66f401402e0ef2e257866ef3fba3",
+  "duckdb_version": "v2.0.0",
+  "duckdb_source_ref": "d54cbbe3df17e8e5ce68312f483b4155836112aa",
+  "haybarn_package": "@haybarn/haybarn-wasm@2.0.0-rc11",
+  "haybarn_source_ref": "9b1a0c5829c056edaecd8ee8e7249a70fb8f50c8",
+  "emscripten_version": "6.0.13",
+  "wasm_rust_toolchain": "nightly-2026-05-20",
+  "native": {
+    "platform": "osx_arm64",
+    "sql_test_cases_passed": 18,
+    "sql_assertions_passed": 1127,
+    "sql_tests_skipped": 0,
+    "backends": ["sqlite", "postgresql"],
+    "ci_artifact_smoke": {
+      "build_run": "https://github.com/Query-farm/duckdb-grainlift/actions/runs/41675272004",
+      "artifact": "main-extensions-osx_arm64",
+      "python_package": "duckdb==2.0.0",
+      "passed": true
+    }
+  },
+  "browser": {
+    "runtime": "Chromium via Playwright",
+    "artifact_source": "local build",
+    "signed": false,
+    "checks": ["load", "scan", "filter", "parameters", "ingestion", "transaction rollback", "detach"],
+    "results": [
+      {"platform": "wasm_eh", "transport": "http", "passed": true},
+      {"platform": "wasm_threads", "transport": "http", "passed": true},
+      {"platform": "wasm_threads", "transport": "iroh", "passed": true}
+    ]
+  }
+}

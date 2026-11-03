@@ -14,8 +14,11 @@ import duckdb
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("extension", type=Path)
+    parser.add_argument("extension", type=Path, nargs="?")
+    parser.add_argument("--published", action="store_true")
     args = parser.parse_args()
+    if (args.extension is None) == (not args.published):
+        parser.error("provide an artifact path or --published")
     assert duckdb.__version__ == "2.0.0", duckdb.__version__
     root = Path(__file__).resolve().parents[2]
     with socket.socket() as listener:
@@ -44,10 +47,17 @@ def main():
                             raise TimeoutError("Gateway did not become ready") from None
                         time.sleep(0.1)
                 # Unsigned loading is confined to the locally built CI artifact.
-                with duckdb.connect(config={"allow_unsigned_extensions": "true"}) as db:
+                with duckdb.connect(
+                    config={"allow_unsigned_extensions": not args.published}
+                ) as db:
                     db.execute("INSTALL httpfs; LOAD httpfs")
-                    extension = str(args.extension.resolve()).replace("'", "''")
-                    db.execute(f"LOAD '{extension}'")
+                    if args.published:
+                        db.execute("SET allow_extension_repositories = 'allowed'")
+                        db.execute("FORCE INSTALL grainlift FROM query_farm")
+                        db.execute("LOAD grainlift FROM query_farm")
+                    else:
+                        extension = str(args.extension.resolve()).replace("'", "''")
+                        db.execute(f"LOAD '{extension}'")
                     assert db.execute(
                         "SELECT extension_version FROM duckdb_extensions() WHERE extension_name='grainlift'"
                     ).fetchone() == ("v0.6.1",)

@@ -6,6 +6,7 @@
 # Env:
 #   EMSDK_DIR            emsdk checkout with 6.0.13 activated (Haybarn 2.0) (default ~/Development/emsdk)
 #   GRAINLIFT_SOURCE_DIR grainlift Cargo workspace (default ./grainlift)
+#   GRAINLIFT_BUILD_DIR  optional isolated build directory
 #   DEPLOY_DIR           optional: copy the .wasm into this local extension repository
 #                        directory (e.g. <repo>/<engine-rev>/wasm_threads)
 #
@@ -17,8 +18,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PLATFORM="${1:-wasm_threads}"
 EMSDK_DIR="${EMSDK_DIR:-$HOME/Development/emsdk}"
-BUILD_DIR="$SCRIPT_DIR/build/$PLATFORM"
+BUILD_DIR="${GRAINLIFT_BUILD_DIR:-$SCRIPT_DIR/build/$PLATFORM}"
 
+# shellcheck source=/dev/null
 EMSDK_QUIET=1 source "$EMSDK_DIR/emsdk_env.sh" >/dev/null
 emcc --version | head -1
 
@@ -41,6 +43,7 @@ esac
 emcmake cmake -G Ninja \
   -S "$SCRIPT_DIR/duckdb" -B "$BUILD_DIR" \
   -DCMAKE_BUILD_TYPE=Release \
+  -DDUCKDB_EXPLICIT_VERSION=v2.0.0 \
   -DDUCKDB_EXTENSION_CONFIGS="$SCRIPT_DIR/extension_config.cmake" \
   -DWASM_LOADABLE_EXTENSIONS=1 \
   -DBUILD_EXTENSIONS_ONLY=1 \
