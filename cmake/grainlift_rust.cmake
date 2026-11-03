@@ -36,7 +36,7 @@ set(GRAINLIFT_CARGO_ENV "")
 # `cargo rustc --crate-type staticlib` builds only the archive; the crate's
 # cdylib output cannot be linked for emscripten (and is not needed here).
 set(GRAINLIFT_CARGO_ARGS
-    rustc --profile ${GRAINLIFT_CARGO_PROFILE}
+    rustc --locked --profile ${GRAINLIFT_CARGO_PROFILE}
     --manifest-path "${GRAINLIFT_SOURCE_DIR}/Cargo.toml"
     -p adbc-driver-grainlift --lib --crate-type staticlib
     --no-default-features --features "${GRAINLIFT_CARGO_FEATURES}"

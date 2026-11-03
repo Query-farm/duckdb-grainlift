@@ -10,13 +10,14 @@ endif()
 duckdb_extension_load(grainlift
     SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}
     LOAD_TESTS
-    EXTENSION_VERSION v0.5.0
+    EXTENSION_VERSION v0.6.1
     LINKED_LIBS "${GRAINLIFT_WASM_RUST_LIB}"
 )
 
 # Native builds use httpfs as DuckDB's HTTPUtil implementation (DuckDB-WASM
 # provides its own XHR-based HTTPUtil in the engine).
-if(NOT EMSCRIPTEN)
+option(GRAINLIFT_BUILD_HTTPFS "Build httpfs alongside the native test engine" OFF)
+if(NOT EMSCRIPTEN AND GRAINLIFT_BUILD_HTTPFS)
     duckdb_extension_load(httpfs
         GIT_URL https://github.com/Query-farm-haybarn/haybarn-httpfs
         GIT_TAG 9c5025d

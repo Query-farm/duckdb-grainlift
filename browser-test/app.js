@@ -27,11 +27,11 @@ const base = new URL('.', location.href).href;
 const coi = !wantEh && self.crossOriginIsolated;
 const bundle = coi
     ? {
-          mainModule: base + 'duckdb-coi.wasm',
-          mainWorker: base + 'duckdb-browser-coi.worker.js',
-          pthreadWorker: base + 'duckdb-browser-coi.pthread.worker.js',
+          mainModule: base + 'duckdb-threads.wasm',
+          mainWorker: base + 'duckdb-browser-threads.worker.js',
+          pthreadWorker: base + 'duckdb-browser-threads.pthread.worker.js',
       }
-    : { mainModule: base + 'duckdb-eh.wasm', mainWorker: base + 'duckdb-browser-eh.worker.js', pthreadWorker: null };
+    : { mainModule: base + 'duckdb-base.wasm', mainWorker: base + 'duckdb-browser-base.worker.js', pthreadWorker: null };
 
 const worker = new Worker(bundle.mainWorker);
 

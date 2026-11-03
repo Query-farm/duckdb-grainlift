@@ -1,0 +1,81 @@
+name: DuckDB 2.0 extension distribution
+
+on:
+  push:
+    branches: [v2.0]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Sign and verify without uploading to Query.Farm
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: distribution-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: Query-farm/extension-ci-tools/.github/workflows/build.yml@b52447c89464f4f275a6de44a999c5512d47e1d8
+    with:
+      duckdb_version: v2.0.0
+      ci_tools_version: b52447c89464f4f275a6de44a999c5512d47e1d8
+      groups: |
+        main:
+          config: extension_config.cmake
+          toolchain: rust
+      reduced_ci_mode: disabled
+      exclude_archs: windows_amd64;windows_arm64;windows_amd64_mingw;windows_amd64_rtools;wasm_mvp;wasm_eh;wasm_threads;osx_amd64;linux_amd64_musl;linux_arm64_musl
+      test_config: '{"skip_error_messages":["__never_skip__"]}'
+
+  gateway-smoke:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249
+        with:
+          toolchain: 1.97.1
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: grainlift
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+      - uses: columnar-tech/setup-dbc@ef4bdac93f5792831ebebe3fa2d848a040558caa
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: '*extensions*linux_amd64'
+          path: artifacts
+          merge-multiple: true
+      - name: Build gateway and install SQLite
+        run: |
+          cargo build --locked --manifest-path grainlift/Cargo.toml -p grainlift-server
+          dbc install sqlite --level user
+      - name: Test released DuckDB against a real gateway
+        env:
+          GRAINLIFT_SERVER_BIN: ${{ github.workspace }}/grainlift/target/debug/grainlift-server
+        run: |
+          extension=$(find artifacts -name grainlift.duckdb_extension -type f)
+          test -n "$extension"
+          uv run --python 3.13 --with duckdb==2.0.0 python test/python/release_smoke.py "$extension"
+
+  deploy:
+    needs: [build, gateway-smoke]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/v2.0'
+    uses: Query-farm/extension-ci-tools/.github/workflows/_query_farm_deploy.yml@b52447c89464f4f275a6de44a999c5512d47e1d8
+    with:
+      extension_name: grainlift
+      duckdb_version: v2.0.0
+      ci_tools_version: b52447c89464f4f275a6de44a999c5512d47e1d8
+      exclude_archs: windows_amd64;windows_arm64;windows_amd64_mingw;windows_amd64_rtools;wasm_mvp;wasm_eh;wasm_threads;osx_amd64;linux_amd64_musl;linux_arm64_musl
+      dry_run: ${{ inputs.dry_run == true }}
+    secrets:
+      signing_key: ${{ secrets.QUERY_FARM_EXTENSION_SIGNING_KEY }}
+      r2_access_key_id: ${{ secrets.QUERY_FARM_R2_ACCESS_KEY_ID }}
+      r2_secret_access_key: ${{ secrets.QUERY_FARM_R2_SECRET_ACCESS_KEY }}

@@ -5,7 +5,7 @@
 # wasm-pack.
 set -euo pipefail
 cd "$(dirname "$0")"
-HAYBARN_WASM_DIR="${HAYBARN_WASM_DIR:-$HOME/Development/haybarn/haybarn-wasm}"
+HAYBARN_WASM_DIR="${HAYBARN_WASM_DIR:-$HOME/Development/haybarn/haybarn-wasm-2.0}"
 SHELL_DIR="$HAYBARN_WASM_DIR/packages/duckdb-wasm-shell"
 
 rm -rf shell-build

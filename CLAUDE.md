@@ -9,23 +9,21 @@ at runtime.
 ## Why this exists: WASM
 
 This extension exists for **DuckDB-WASM**, where ADBC drivers cannot be loaded
-dynamically (no `dlopen` of arbitrary native libraries in the browser). On
-Linux, macOS and Windows people should use **adbc_scanner**, which loads any
-ADBC driver in-process — including the grainlift driver itself — so a native
-grainlift extension adds nothing there.
+dynamically (no `dlopen` of arbitrary native libraries in the browser).
+Native Linux and macOS builds also provide the same attachment API over
+HTTP(S), with the Grainlift driver bundled. **adbc_scanner** remains available
+for applications that need arbitrary dynamically loaded ADBC drivers.
 
 Consequences for decisions in this repo:
 
-- **Ship for Haybarn only.** The release target is the Haybarn community
-  extensions repository (`~/Development/haybarn/haybarn-community-extensions`),
-  built against the Haybarn engine and served to haybarn-wasm. It is not meant
-  for duckdb/community-extensions: the browser Iroh path depends on Haybarn's
+- **Ship native DuckDB and Haybarn WASM.** Native DuckDB 2.0 builds are signed
+  and published to Query.Farm. WASM builds use the Haybarn community registry
+  (`~/Development/haybarn/haybarn-community-extensions-2.0`). The browser Iroh path depends on Haybarn's
   SharedArrayBuffer ring stubs (`vgi_wasm_*` in haybarn-wasm `lib/js-stubs.js`)
   and its Iroh adapter-worker bridge, and the build pins Haybarn's DuckDB fork.
-- **WASM is the product; native builds are a test vehicle.** The native build
-  exists so the sqllogictests can exercise the same code path (HTTP through
-  DuckDB's `HTTPUtil`, via httpfs) without a browser. Don't spend effort on
-  native-only features or native packaging.
+- **Keep both release paths tested.** Native builds use the upstream DuckDB
+  release and HTTP through `HTTPUtil` via httpfs. WASM builds use the exact
+  engine revision in the published Haybarn npm package.
 - **COI (`wasm_threads`) is the primary flavor**; `wasm_eh` is supported
   (HTTP only — `iroh://` needs COI); `wasm_mvp` is out of scope.
 

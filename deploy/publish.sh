@@ -10,7 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 ROOT="$(cd .. && pwd)"
 BUCKET=grainlift-demo
-ENGINE_REV="${ENGINE_REV:-v1.5.5}"
+ENGINE_REV="${ENGINE_REV:-v2.0.0}"
 SITE="$ROOT/browser-test/site"
 DIST="$ROOT/deploy/dist"
 
@@ -19,7 +19,7 @@ mkdir -p "$DIST/repo/$ENGINE_REV/wasm_threads"
 cp "$SITE/shell.html" "$DIST/index.html"
 cp "$SITE/shell.html" "$DIST/shell.html"
 cp "$SITE"/{shell-demo.bundle.js,shell_bg.wasm,xterm.css,iroh-adapter.js} "$DIST/"
-cp "$SITE"/{duckdb-coi.wasm,duckdb-browser-coi.worker.js,duckdb-browser-coi.pthread.worker.js} "$DIST/"
+cp "$SITE"/{duckdb-threads.wasm,duckdb-browser-threads.worker.js,duckdb-browser-threads.pthread.worker.js} "$DIST/"
 cp -R "$SITE/iroh" "$DIST/iroh"
 find "$DIST/iroh" -name "*.d.ts" -delete
 cp "$ROOT/build/wasm_threads/extension/grainlift/grainlift.duckdb_extension.wasm" \

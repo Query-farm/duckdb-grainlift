@@ -97,7 +97,7 @@ if (!self.crossOriginIsolated) {
     throw new Error('page is not cross-origin isolated');
 }
 const base = new URL('.', location.href).href;
-const worker = new Worker(base + 'duckdb-browser-coi.worker.js');
+const worker = new Worker(base + 'duckdb-browser-threads.worker.js');
 
 let irohReady = Promise.resolve(null);
 {
@@ -131,7 +131,7 @@ for (const a of document.querySelectorAll('[data-transport]')) {
 
 async function resolveDatabase(progress) {
     const db = new duckdb.AsyncDuckDB(new duckdb.VoidLogger(), worker);
-    await db.instantiate(base + 'duckdb-coi.wasm', base + 'duckdb-browser-coi.pthread.worker.js', progress);
+    await db.instantiate(base + 'duckdb-threads.wasm', base + 'duckdb-browser-threads.pthread.worker.js', progress);
     await db.open({ allowUnsignedExtensions: true });
     if (transport === 'iroh') {
         await irohReady;

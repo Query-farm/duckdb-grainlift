@@ -12,6 +12,20 @@ grainlift service over Iroh through the page's Iroh adapter Worker.
 
 ## Using it
 
+The `v2.0` branch targets DuckDB 2.0.0 and Haybarn 2.0.0-rc11. The extension
+version is 0.6.1; its version is independent of the engine version. Native
+Linux and macOS builds are signed and published to Query.Farm:
+
+```sql
+INSTALL grainlift FROM query_farm;
+LOAD grainlift;
+```
+
+Haybarn's `wasm_threads` and `wasm_eh` builds are published through the Haybarn
+community registry (`INSTALL grainlift FROM community`). Iroh requires the
+Haybarn threaded engine; native builds support HTTP(S). Windows and upstream
+DuckDB-WASM binaries are not published by this repository.
+
 ```sql
 LOAD grainlift;
 
@@ -60,7 +74,7 @@ ATTACH options (also usable in `CREATE SECRET (TYPE grainlift, ...)`):
 
 ### HTTP request costs
 
-Version 0.6.0 embeds the Grainlift 0.5 driver and requires a protocol 0.5
+Versions 0.6.x embed the Grainlift 0.5 driver and require a protocol 0.5
 gateway. HTTP capabilities arrive with `open_connection`; the driver makes no
 `/health` probe. When the selected backend explicitly declares statistics
 unsupported, metadata planning returns `NOT_IMPLEMENTED` locally. Table schemas
@@ -137,8 +151,8 @@ checkout.
 ```sh
 git submodule update --init --recursive
 
-# Native (loads httpfs for HTTP); vcpkg provides openssl/curl for httpfs.
-VCPKG_TOOLCHAIN_PATH=~/Development/vcpkg/scripts/buildsystems/vcpkg.cmake GEN=ninja make release
+# Native (loads the engine's published httpfs extension for HTTP).
+GEN=ninja make release
 
 # DuckDB-WASM, COI (wasm_threads) and eh; needs emsdk 6.0.13 (Haybarn 2.0) and
 # rustup toolchain nightly-2026-05-20 with rust-src + wasm32-unknown-emscripten.
@@ -168,7 +182,7 @@ GRAINLIFT_URI=grainlift+http://127.0.0.1:8484 GRAINLIFT_TOKEN=grainlift-test-tok
 
 Browser: `browser-test/` is a small page on the published `@haybarn/haybarn-wasm`
 bundle. `npm install && npm run build`, copy the built `.wasm` files to
-`browser-test/repo/v1.5.5/<platform>/`, run `python3 serve.py 8080` (COOP/COEP
+`browser-test/repo/v2.0.0/<platform>/`, run `python3 serve.py 8080` (COOP/COEP
 headers), and open `http://127.0.0.1:8080/` (`?bundle=eh` for the eh build,
 `?irohKey=<hex>` to pin the browser's Iroh identity). `window.grainliftTest.sql()`
 runs SQL for automation. The page attaches the SQLite demo as `demo` and
@@ -189,7 +203,7 @@ header switches between HTTP and Iroh.
 
 ```sh
 cd browser-test
-./build-shell.sh          # once: builds the shell wasm from ~/Development/haybarn/haybarn-wasm
+./build-shell.sh          # builds the shell from ~/Development/haybarn/haybarn-wasm-2.0
 npm install && npm run build
 python3 serve.py 8080     # then open http://127.0.0.1:8080/shell.html
 ```
@@ -220,3 +234,16 @@ GRAINLIFT_OPEN=1 GRAINLIFT_IROH=1 scripts/test-server.sh 8484
 `GRAINLIFT_OPEN=1` lets anyone who knows the endpoint ID use every target.
 
 See [PLAN.md](PLAN.md) for the design.
+
+## Releasing
+
+Pushes to `v2.0` run the native build, SQL tests, and a real SQLite gateway
+smoke test before signing and publishing the DuckDB 2.0 extension. The manual
+workflow's `dry_run` option signs and verifies without uploading.
+
+For Haybarn, update `extensions/grainlift/description.yml` on the
+`haybarn-2.0` branch of `Query-farm-haybarn/haybarn-community-extensions` to
+the tested extension commit, then dispatch its `build.yml` with
+`extension_name=grainlift`, `duckdb_version=haybarn-v2.0.0-rc11`, and
+`deploy=true`. The engine submodule and browser npm dependency must match that
+release exactly. Keep the registry's `variegata` reference for older engines.

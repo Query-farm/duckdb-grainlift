@@ -14,7 +14,7 @@
 #include "grainlift_host.h"
 
 #ifndef GRAINLIFT_EXTENSION_VERSION
-#define GRAINLIFT_EXTENSION_VERSION "0.5.0"
+#define GRAINLIFT_EXTENSION_VERSION "0.6.1"
 #endif
 
 namespace adbc_scanner {

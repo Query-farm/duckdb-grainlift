@@ -551,10 +551,10 @@ static unique_ptr<FunctionData> AdbcScanBind(ClientContext &context, TableFuncti
     if (params_it != input.named_parameters.end()) {
         auto &params_value = params_it->second;
         if (!params_value.IsNull()) {
-            // params should be a STRUCT (created by row(...))
+            // DuckDB 2.0 represents row(...) as TUPLE; named STRUCTs remain valid.
             auto &params_type = params_value.type();
-            if (params_type.id() != LogicalTypeId::STRUCT) {
-                throw InvalidInputException("grainlift_scan: 'params' must be a STRUCT (use row(...) to create it)");
+            if (!StructType::IsStruct(params_type)) {
+                throw InvalidInputException("grainlift_scan: 'params' must be a STRUCT or TUPLE (use row(...) to create it)");
             }
 
             // Extract child values and types from the STRUCT
@@ -1454,7 +1454,7 @@ void RegisterAdbcTableFunctions(DatabaseInstance &db) {
 
     // Optional named parameters: a call that leaves one out does not pass it.
     adbc_scan_function.GetSignature().WithTypedKwargs("kwargs", [](TypedKwargs &options) {
-        // Bind parameters (accepts a STRUCT from row(...))
+        // Bind parameters (accepts a named STRUCT or a TUPLE from row(...)).
         options.Add("params", LogicalType::ANY);
         options.Add("columns", LogicalType::ANY);
         // Batch size hint (driver-specific, best-effort)
