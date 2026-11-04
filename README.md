@@ -197,8 +197,15 @@ The same validation also built both WASM flavors with Emscripten 6.0.13 and
 tested them in Chromium against `@haybarn/haybarn-wasm@2.0.0-rc11`: HTTP passed
 on `wasm_eh` and `wasm_threads`, and Iroh passed on `wasm_threads`, including
 parameterized queries, ingestion and rollback. These used unsigned local
-artifacts; signed registry publication is a separate release step. The build
+artifacts. The build
 pins and results are recorded in [the validation record](test/results/2026-11-03-2.0.json).
+
+On 2026-11-04, the same browser checks passed against the published Haybarn
+community extensions with signature verification enabled: HTTP on both WASM
+flavors and Iroh on the threaded flavor. The
+[Haybarn release workflow](https://github.com/Query-farm-haybarn/haybarn-community-extensions/actions/runs/41701655923)
+completed deployment and npm publication. See the
+[signed-artifact results](test/results/2026-11-04-haybarn-2.0-signed.json).
 
 Browser: `browser-test/` is a small page on the published `@haybarn/haybarn-wasm`
 bundle. `npm install && npm run build`, copy the built `.wasm` files to

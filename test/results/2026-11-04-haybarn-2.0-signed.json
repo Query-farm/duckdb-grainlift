@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-04",
+  "extension_version": "v0.6.1",
+  "extension_source_ref": "db3c234cd4a6741d584af2a23698cfb805b7cc2c",
+  "grainlift_source_ref": "d8d5119ed71f66f401402e0ef2e257866ef3fba3",
+  "haybarn_package": "@haybarn/haybarn-wasm@2.0.0-rc11",
+  "engine_version": "v2.0.0",
+  "release_run": "https://github.com/Query-farm-haybarn/haybarn-community-extensions/actions/runs/41701655923",
+  "release_conclusion": "success",
+  "repository": "community",
+  "artifact_source": "published registry",
+  "runtime": "Chromium via Playwright",
+  "signature_verification": true,
+  "checks": ["load", "scan", "filter", "parameters", "ingestion", "transaction rollback", "detach"],
+  "results": [
+    {"platform": "wasm_eh", "transport": "http", "extension_version": "v0.6.1", "signed": true, "passed": true},
+    {"platform": "wasm_threads", "transport": "http", "extension_version": "v0.6.1", "signed": true, "passed": true},
+    {"platform": "wasm_threads", "transport": "iroh", "extension_version": "v0.6.1", "signed": true, "passed": true}
+  ]
+}
